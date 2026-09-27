@@ -287,7 +287,7 @@ export default function AdminDashboard() {
         )}
 
         {/* HOUSE BANK TAB */}
-        {activeTab === 'HOUSE BANK' && houseStats && (
+        {activeTab === 'FINANCIALS' && houseStats && (
           <div>
             <h2 style={{ color: '#ffcc00', marginTop: 0 }}>The House Bank & Vault</h2>
             

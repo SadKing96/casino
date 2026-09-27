@@ -22,7 +22,7 @@ export default function Blackjack() {
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   // Chip History State
-  const [chipHistory, setChipHistory] = useState<{amount: number, type: 'win'|'loss', id: number}[]>([])
+  const [chipHistory, setChipHistory] = useState<{amount: number, type: string, id: number}[]>([])
 
   // Auto-scroll chat
   useEffect(() => {
