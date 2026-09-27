@@ -97,28 +97,32 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0' }}>
-          <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', flex: 1 }}></div>
-          <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 'bold' }}>QUICK PLAY</span>
-          <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', flex: 1 }}></div>
-        </div>
+        {process.env.NODE_ENV !== 'production' && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0' }}>
+              <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', flex: 1 }}></div>
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 'bold' }}>QUICK PLAY (DEV ONLY)</span>
+              <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', flex: 1 }}></div>
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-            <input 
-              type="checkbox" 
-              id="quickAdmin"
-              checked={isQuickAdmin}
-              onChange={e => setIsQuickAdmin(e.target.checked)}
-              style={{ width: '16px', height: '16px' }}
-            />
-            <label htmlFor="quickAdmin" style={{ color: '#fff', opacity: 0.8, fontSize: '0.9rem' }}>Create as Admin Account</label>
-          </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                <input 
+                  type="checkbox" 
+                  id="quickAdmin"
+                  checked={isQuickAdmin}
+                  onChange={e => setIsQuickAdmin(e.target.checked)}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <label htmlFor="quickAdmin" style={{ color: '#fff', opacity: 0.8, fontSize: '0.9rem' }}>Create as Admin Account</label>
+              </div>
 
-          <button onClick={handleGuest} disabled={isLoading} className="btn-secondary" style={{ padding: '12px', fontSize: '1.1rem', fontWeight: 'bold', width: '100%', border: '1px solid var(--neon-gold)' }}>
-            Play as {isQuickAdmin ? 'Admin' : 'Guest'}
-          </button>
-        </div>
+              <button type="button" onClick={handleGuest} disabled={isLoading} className="btn-secondary" style={{ padding: '12px', fontSize: '1.1rem', fontWeight: 'bold', width: '100%', border: '1px solid var(--neon-gold)' }}>
+                Play as {isQuickAdmin ? 'Admin' : 'Guest'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
