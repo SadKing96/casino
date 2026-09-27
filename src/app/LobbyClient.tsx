@@ -28,7 +28,7 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
     setIsProcessing(true)
     try {
       const updatedUser = await withdrawChips(chipAmount)
-      updateBalances(updatedUser.chipBalance, updatedUser.bankBalance)
+      updateBalances(updatedUser!.chipBalance, updatedUser!.bankBalance)
     } catch (e) {
       console.error(e)
     }
@@ -40,7 +40,7 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
     setIsProcessing(true)
     try {
       const updatedUser = await depositChips(chipAmount)
-      updateBalances(updatedUser.chipBalance, updatedUser.bankBalance)
+      updateBalances(updatedUser!.chipBalance, updatedUser!.bankBalance)
     } catch (e) {
       console.error(e)
     }
@@ -52,7 +52,7 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
     setIsProcessing(true)
     try {
       const updatedUser = await buyCoins(1000)
-      updateBalances(updatedUser.chipBalance, updatedUser.bankBalance)
+      updateBalances(updatedUser!.chipBalance, updatedUser!.bankBalance)
     } catch (e) {
       console.error(e)
     }
