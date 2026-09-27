@@ -11,7 +11,7 @@ export function ForcePasswordReset() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  if (!user || !user.requiresPasswordReset) return null
+  if (!user || !(user as any).requiresPasswordReset) return null
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault()
