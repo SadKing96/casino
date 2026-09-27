@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  passwordHash String?
+  requiresPasswordReset Boolean @default(false)
+  chipBalance Int      @default(0)
+  bankBalance Int      @default(1000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+  spins      Spin[]
+  piggyState PiggyState?
+  frankState FrankensteinState?
+  buffaloState BuffaloState?
+  blackjackState BlackjackState?
+  role      String   @default("PLAYER") // ADMIN, BANNED, PLAYER
+  transactions Transaction[]
+  gameHistory  GameHistory[]
+}
+
+model Spin {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  bet       Int
+  win       Int
+  result    String
+  createdAt DateTime @default(now())
+}
+
+model PiggyState {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blueMeter          Int      @default(9)
+  yellowMeter        Int      @default(0)
+  redMeter           Int      @default(0)
+  isFreeSpinMode     Boolean  @default(false)
+  activeFeatures     String   @default("[]")
+  freeSpinsRemaining Int      @default(0)
+  jackpotProgress    String   @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model FrankensteinState {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isFreeSpinMode     Boolean  @default(false)
+  freeSpinsRemaining Int      @default(0)
+  currentMultiplier  Int      @default(1)
+  jackpotProgress    String   @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model GlobalJackpot {
+  id     String @id
+  mini   Float
+  minor  Float
+  maxi   Float
+  super  Float
+  major  Float
+  grand  Float
+  updatedAt DateTime @updatedAt
+}
+
+model BuffaloState {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isFreeSpinMode     Boolean  @default(false)
+  freeSpinsRemaining Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model BlackjackState {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status             String   @default("BETTING") // BETTING, PLAYER_TURN, DEALER_TURN, GAME_OVER
+  playerHands        String   @default("[[]]") // Array of arrays for splits
+  dealerHand         String   @default("[]")
+  currentHandIndex   Int      @default(0)
+  currentBet         Int      @default(0)
+  chatHistory        String   @default("[]") // Array of chat messages
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model HoldemTable {
+  id                 String   @id @default(cuid())
+  name               String   @default("Rusty's Table")
+  status             String   @default("LOBBY") // LOBBY, PRE_FLOP, FLOP, TURN, RIVER, SHOWDOWN
+  communityCards     String   @default("[]") // JSON array of Cards
+  potAmount          Int      @default(0)
+  currentBet         Int      @default(0) // The highest bet on the current street
+  players            String   @default("[]") // JSON array of player states
+  dealerButtonIndex  Int      @default(0)
+  currentTurnIndex   Int      @default(0)
+  chatHistory        String   @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model CrapsTable {
+  id                 String   @id @default(cuid())
+  name               String   @default("Casino Craps")
+  status             String   @default("OFF") // OFF or ON
+  point              Int?     // 4, 5, 6, 8, 9, 10
+  dice               String   @default("[]") // [die1, die2]
+  activeBets         String   @default("[]") // Array of { userId, type, amount }
+  shooterId          String?  // ID of user currently rolling
+  chatHistory        String   @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model RouletteTable {
+  id                 String   @id @default(cuid())
+  name               String   @default("Casino Roulette")
+  status             String   @default("BETTING") // BETTING, SPINNING
+  winningNumber      String?  // '00', '0', '1', etc.
+  activeBets         String   @default("[]") // Array of bets
+  chatHistory        String   @default("[]") // Action log
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model BaccaratTable {
+  id                 String   @id @default(cuid())
+  name               String   @default("VIP Baccarat")
+  status             String   @default("BETTING") // BETTING, DEALING
+  playerHand         String   @default("[]")
+  bankerHand         String   @default("[]")
+  activeBets         String   @default("[]") // { userId, type: 'PLAYER'|'BANKER'|'TIE', amount }
+  chatHistory        String   @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model ThreeCardPokerTable {
+  id                 String   @id @default(cuid())
+  name               String   @default("Three Card Poker")
+  status             String   @default("ANTE") // ANTE, PLAY, RESOLVE
+  dealerHand         String   @default("[]") // Only revealed at RESOLVE
+  playerHands        String   @default("{}") // { [userId]: { hand: string[], betAnte: number, betPairPlus: number, betPlay: number, status: 'PLAY'|'FOLD' } }
+  chatHistory        String   @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model CrashGame {
+  id                 String   @id @default(cuid())
+  status             String   @default("BETTING") // BETTING, FLYING, CRASHED
+  crashPoint         Float    // Pre-determined multiplier at which it crashes
+  currentMultiplier  Float    @default(1.0) // Used to track frontend state if needed, though frontend mostly animates
+  startTime          DateTime? // When did the flight start? Used to calculate exact multiplier securely
+  activeBets         String   @default("[]") // { userId, betAmount, cashOutMultiplier: null | float }
+  chatHistory        String   @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model KenoGame {
+  id                 String   @id @default(cuid())
+  status             String   @default("BETTING") // BETTING, DRAWING
+  drawnNumbers       String   @default("[]") // Up to 20 numbers
+  activeBets         String   @default("[]") // { userId, amount, selectedNumbers: number[] }
+  chatHistory        String   @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model GlobalConfig {
+  id                 String   @id @default("default")
+  maintenanceMode    Boolean  @default(false)
+  testMode           Boolean  @default(false)
+  enabledGames       String   @default("[]") // JSON array of enabled game IDs
+  gameOdds           String   @default("{}") // JSON object of house edge overrides
+  houseBankBalance   Float    @default(1000000)
+  updatedAt          DateTime @updatedAt
+}
+
+model Transaction {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type               String   // FIAT_DEPOSIT, WITHDRAWAL, CHIP_PURCHASE
+  amount             Float    // USD equivalent
+  status             String   @default("COMPLETED")
+  createdAt          DateTime @default(now())
+}
+
+model GameHistory {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameType           String   // e.g. "CRASH", "PIGGY_SLOTS"
+  tableId            String?  // Optional reference to a specific table instance
+  betAmount          Int
+  payout             Int
+  details            String   @default("{}") // JSON details of the hand/spin
+  createdAt          DateTime @default(now())
+}
