@@ -17,7 +17,7 @@ export default function HoldemTable({ tableId, onLeave }: { tableId: string, onL
   const [isTyping, setIsTyping] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
-  const [chipHistory, setChipHistory] = useState<{amount: number, type: 'win'|'loss', id: number}[]>([])
+  const [chipHistory, setChipHistory] = useState<{amount: number, type: string, id: number}[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const fetchState = () => {
