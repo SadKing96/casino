@@ -19,7 +19,7 @@ export async function loginAsGuest(isAdmin: boolean = false) {
   const cookieStore = await cookies()
   cookieStore.set('userId', user.id, { path: '/' })
   
-  return user
+  return JSON.parse(JSON.stringify(user))
 }
 
 export async function getUser() {
@@ -28,9 +28,10 @@ export async function getUser() {
   
   if (!userId) return null
   
-  return await prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: userId }
   })
+  return user ? JSON.parse(JSON.stringify(user)) : null
 }
 
 export async function logout() {
@@ -57,7 +58,7 @@ export async function buyCoins(amount: number = 1000) {
     }
   })
   
-  return user
+  return JSON.parse(JSON.stringify(user))
 }
 
 export async function withdrawChips(amount: number) {
@@ -77,7 +78,7 @@ export async function withdrawChips(amount: number) {
     }
   })
   
-  return updatedUser
+  return JSON.parse(JSON.stringify(updatedUser))
 }
 
 export async function depositChips(amount: number) {
@@ -97,7 +98,7 @@ export async function depositChips(amount: number) {
     }
   })
   
-  return updatedUser
+  return JSON.parse(JSON.stringify(updatedUser))
 }
 
 const SYMBOLS = ['🧟‍♂️', '⚡', '🧠', '🦇', '🧪', '💎']
@@ -207,7 +208,7 @@ export async function loginWithPassword(username: string, password: string, reme
   }
   
   cookieStore.set('userId', user.id, options)
-  return user
+  return JSON.parse(JSON.stringify(user))
 }
 
 export async function updatePassword(newPassword: string) {
@@ -226,5 +227,5 @@ export async function updatePassword(newPassword: string) {
     }
   })
   
-  return updatedUser
+  return JSON.parse(JSON.stringify(updatedUser))
 }
