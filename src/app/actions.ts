@@ -4,6 +4,18 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
+function stripUser(user: any) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    chipBalance: user.chipBalance,
+    bankBalance: user.bankBalance,
+    role: user.role,
+    requiresPasswordReset: user.requiresPasswordReset || false
+  };
+}
+
 export async function loginAsGuest(isAdmin: boolean = false) {
   const guestName = isAdmin ? `Admin_${Math.floor(Math.random() * 10000)}` : `Guest_${Math.floor(Math.random() * 10000)}`
   
@@ -19,7 +31,7 @@ export async function loginAsGuest(isAdmin: boolean = false) {
   const cookieStore = await cookies()
   cookieStore.set('userId', user.id, { path: '/' })
   
-  return JSON.parse(JSON.stringify(user))
+  return stripUser(user)
 }
 
 export async function getUser() {
@@ -31,7 +43,7 @@ export async function getUser() {
   const user = await prisma.user.findUnique({
     where: { id: userId }
   })
-  return user ? JSON.parse(JSON.stringify(user)) : null
+  return user ? stripUser(user) : null
 }
 
 export async function logout() {
@@ -58,7 +70,7 @@ export async function buyCoins(amount: number = 1000) {
     }
   })
   
-  return JSON.parse(JSON.stringify(user))
+  return stripUser(user)
 }
 
 export async function withdrawChips(amount: number) {
@@ -78,7 +90,7 @@ export async function withdrawChips(amount: number) {
     }
   })
   
-  return JSON.parse(JSON.stringify(updatedUser))
+  return stripUser(updatedUser)
 }
 
 export async function depositChips(amount: number) {
@@ -98,7 +110,7 @@ export async function depositChips(amount: number) {
     }
   })
   
-  return JSON.parse(JSON.stringify(updatedUser))
+  return stripUser(updatedUser)
 }
 
 const SYMBOLS = ['🧟‍♂️', '⚡', '🧠', '🦇', '🧪', '💎']
@@ -208,7 +220,7 @@ export async function loginWithPassword(username: string, password: string, reme
   }
   
   cookieStore.set('userId', user.id, options)
-  return JSON.parse(JSON.stringify(user))
+  return stripUser(user)
 }
 
 export async function updatePassword(newPassword: string) {
@@ -227,5 +239,5 @@ export async function updatePassword(newPassword: string) {
     }
   })
   
-  return JSON.parse(JSON.stringify(updatedUser))
+  return stripUser(updatedUser)
 }
