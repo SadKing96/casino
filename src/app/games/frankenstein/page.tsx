@@ -2,7 +2,7 @@
 
 import { useUser } from '@/context/UserContext'
 import { getFrankensteinState, spinFrankenstein, getGlobalState } from './actions'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -31,6 +31,34 @@ export default function FrankensteinSlot() {
 
   const [globalJackpots, setGlobalJackpots] = useState<any>(null)
   const [activePlayers, setActivePlayers] = useState<string[]>([])
+
+  // Audio state
+  const [isMuted, setIsMuted] = useState(false)
+  const isMutedRef = useRef(false)
+  const bgMusicRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    isMutedRef.current = isMuted
+    if (bgMusicRef.current) {
+      bgMusicRef.current.muted = isMuted
+    }
+  }, [isMuted])
+
+  useEffect(() => {
+    // Initialize background music
+    if (typeof window !== 'undefined') {
+      bgMusicRef.current = new Audio('/audio/bg_music.mp3')
+      bgMusicRef.current.loop = true
+      bgMusicRef.current.volume = 0.3
+    }
+    
+    return () => {
+      if (bgMusicRef.current) {
+        bgMusicRef.current.pause()
+        bgMusicRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -65,6 +93,11 @@ export default function FrankensteinSlot() {
     if (!user) return
     if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return
     
+    // Play background music on first interaction if not playing
+    if (bgMusicRef.current && bgMusicRef.current.paused && !isMutedRef.current) {
+      bgMusicRef.current.play().catch(console.error)
+    }
+
     setIsSpinning(true)
     setLastWin(null)
     setWinningLines([])
@@ -86,6 +119,17 @@ export default function FrankensteinSlot() {
         setLastWin(result.totalWin)
         setWinningLines(result.winningLines)
         setJackpotWon(result.jackpotWon)
+        
+        // Trigger "It's alive!" audio if free spins are newly triggered
+        if (!gameState?.isFreeSpinMode && result.newState.isFreeSpinMode) {
+          if ('speechSynthesis' in window && !isMutedRef.current) {
+            const msg = new SpeechSynthesisUtterance("It's alive!");
+            msg.pitch = 0.2; // Deeper, monster-like voice
+            msg.rate = 0.8;
+            window.speechSynthesis.speak(msg);
+          }
+        }
+        
         setGameState(result.newState)
         setLightningSpreads(result.lightningSpreads || [])
         setFireSpreads(result.fireSpreads || [])
@@ -267,6 +311,31 @@ export default function FrankensteinSlot() {
         backdropFilter: 'blur(10px)',
         zIndex: 100
       }}>
+        {/* Mute Button */}
+        <button
+          onClick={() => setIsMuted(prev => !prev)}
+          style={{
+            position: 'absolute',
+            top: '-40px',
+            right: '0',
+            background: 'rgba(0,0,0,0.6)',
+            border: '2px solid #00ffff',
+            borderRadius: '50%',
+            width: '40px',
+            height: '40px',
+            color: '#00ffff',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.2rem',
+            boxShadow: '0 0 10px #00ffff'
+          }}
+          title={isMuted ? "Unmute Audio" : "Mute Audio"}
+        >
+          {isMuted ? '🔇' : '🔊'}
+        </button>
+
         {/* TOP: Mini Display */}
         <div style={{
           background: '#000',

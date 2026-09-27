@@ -6,6 +6,7 @@ import { Card, calculateScore, calculateScoreString } from './utils'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
+import { io, Socket } from 'socket.io-client'
 
 export default function Blackjack() {
   const { user, updateBalances } = useUser()
@@ -24,6 +25,11 @@ export default function Blackjack() {
   // Chip History State
   const [chipHistory, setChipHistory] = useState<{amount: number, type: string, id: number}[]>([])
 
+  // Multiplayer State
+  const [tablePlayers, setTablePlayers] = useState<any[]>([])
+  const [liveActions, setLiveActions] = useState<{id: number, username: string, msg: string}[]>([])
+  const socketRef = useRef<Socket | null>(null)
+
   // Auto-scroll chat
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -36,7 +42,34 @@ export default function Blackjack() {
     getBlackjackState().then(state => {
       if (state) setGameState(state)
     })
+
+    const socket = io('http://localhost:3001')
+    socketRef.current = socket
+    
+    socket.on('connect', () => {
+      socket.emit('authenticate', { userId: user.id, username: user.username })
+      socket.emit('join_table', 'blackjack', { userId: user.id, username: user.username })
+    })
+
+    socket.on('table_players', (players) => {
+      setTablePlayers(players.filter((p: any) => p.userId !== user.id))
+    })
+
+    socket.on('table_action', (data) => {
+      setLiveActions(prev => [...prev, { id: Date.now(), username: data.username, msg: data.msg }].slice(-5))
+    })
+
+    return () => {
+      socket.emit('leave_table', 'blackjack')
+      socket.disconnect()
+    }
   }, [user])
+
+  const broadcastAction = (msg: string) => {
+    if (socketRef.current && user) {
+      socketRef.current.emit('live_action', { tableId: 'blackjack', username: user.username, msg })
+    }
+  }
 
   const handleAction = async (actionFn: () => Promise<any>) => {
     if (!user) return
@@ -216,6 +249,31 @@ export default function Blackjack() {
         </div>
       </div>
 
+      {/* MULTIPLAYER LIVE FEED */}
+      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 50, width: '250px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <h4 style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>Also at table ({tablePlayers.length})</h4>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+          {tablePlayers.map(p => (
+            <div key={p.userId} style={{ background: 'rgba(0,229,255,0.2)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem', color: '#00ffcc' }}>
+              {p.username}
+            </div>
+          ))}
+        </div>
+        <AnimatePresence>
+          {liveActions.map(action => (
+            <motion.div
+              key={action.id}
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              style={{ background: 'rgba(0,0,0,0.6)', borderLeft: '3px solid var(--neon-gold)', padding: '8px 12px', borderRadius: '4px', fontSize: '0.9rem', color: '#fff' }}
+            >
+              <span style={{ fontWeight: 'bold', color: 'var(--neon-gold)' }}>{action.username}</span> {action.msg}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       {/* DEALER PORTRAIT */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '10px', position: 'relative', zIndex: 10, marginTop: '10px' }}>
         <div style={{
@@ -342,16 +400,16 @@ export default function Blackjack() {
                 ${amt}
               </button>
             ))}
-            <button className="btn-primary" style={{ marginLeft: '16px', padding: '16px 32px', fontSize: '1.2rem', boxShadow: '0 0 15px rgba(212,175,55,0.4)' }} onClick={() => handleAction(() => dealHand(betAmount))} disabled={isProcessing || user.chipBalance < betAmount}>
+            <button className="btn-primary" style={{ marginLeft: '16px', padding: '16px 32px', fontSize: '1.2rem', boxShadow: '0 0 15px rgba(212,175,55,0.4)' }} onClick={() => { handleAction(() => dealHand(betAmount)); broadcastAction(`Bet $${betAmount}`) }} disabled={isProcessing || user.chipBalance < betAmount}>
               DEAL
             </button>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '16px', background: 'rgba(0,0,0,0.6)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(212,175,55,0.3)', backdropFilter: 'blur(5px)' }}>
-            <button className="btn-primary" style={{ background: '#0055ff', padding: '16px 32px', fontSize: '1.2rem', minWidth: '120px' }} onClick={() => handleAction(hit)} disabled={isProcessing || !isPlayerTurn}>
+            <button className="btn-primary" style={{ background: '#0055ff', padding: '16px 32px', fontSize: '1.2rem', minWidth: '120px' }} onClick={() => { handleAction(hit); broadcastAction('Hit') }} disabled={isProcessing || !isPlayerTurn}>
               HIT
             </button>
-            <button className="btn-primary" style={{ background: '#ff5500', padding: '16px 32px', fontSize: '1.2rem', minWidth: '120px' }} onClick={() => handleAction(stand)} disabled={isProcessing || !isPlayerTurn}>
+            <button className="btn-primary" style={{ background: '#ff5500', padding: '16px 32px', fontSize: '1.2rem', minWidth: '120px' }} onClick={() => { handleAction(stand); broadcastAction('Stand') }} disabled={isProcessing || !isPlayerTurn}>
               STAND
             </button>
           </div>

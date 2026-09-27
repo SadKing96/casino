@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useUser } from '@/context/UserContext'
 import { withdrawChips, depositChips, buyCoins } from '@/app/actions'
+import FriendsList from './FriendsList'
 
 export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: { initialLeaderboard: any[], enabledGames?: string[] }) {
   const { user, updateBalances } = useUser()
@@ -482,10 +483,9 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
         </div>
 
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '40%' }}>
-          <h2 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>Group Play</h2>
-          <div className="lobby-col-content" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-            <p style={{ opacity: 0.8, marginBottom: '16px', fontSize: '0.9rem' }}>Share the table experience with friends. (Coming Soon)</p>
-            <button className="btn-secondary" style={{ opacity: 0.5, cursor: 'not-allowed', padding: '8px 16px' }}>Create Lobby</button>
+          <h2 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>Friends</h2>
+          <div className="lobby-col-content" style={{ flex: 1, overflow: 'hidden' }}>
+            <FriendsList />
           </div>
         </div>
       </div>

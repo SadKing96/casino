@@ -25,6 +25,22 @@ model User {
   role      String   @default("PLAYER") // ADMIN, BANNED, PLAYER
   transactions Transaction[]
   gameHistory  GameHistory[]
+  friends      Friendship[] @relation("UserFriends")
+  friendOf     Friendship[] @relation("FriendUsers")
+}
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  status    String   @default("PENDING") // PENDING, ACCEPTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendUsers", fields: [friendId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, friendId])
 }
 
 model Spin {

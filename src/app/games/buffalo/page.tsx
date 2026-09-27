@@ -2,7 +2,7 @@
 
 import { useUser } from '@/context/UserContext'
 import { getBuffaloState, spinBuffalo } from './actions'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -25,6 +25,34 @@ export default function BuffaloSlot() {
   const [wildMultipliers, setWildMultipliers] = useState<Record<string, number>>({})
   
   const [activePlayers, setActivePlayers] = useState<string[]>([])
+
+  // Audio state
+  const [isMuted, setIsMuted] = useState(false)
+  const isMutedRef = useRef(false)
+  const bgMusicRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    isMutedRef.current = isMuted
+    if (bgMusicRef.current) {
+      bgMusicRef.current.muted = isMuted
+    }
+  }, [isMuted])
+
+  useEffect(() => {
+    // Initialize background music
+    if (typeof window !== 'undefined') {
+      bgMusicRef.current = new Audio('/audio/bg_music.mp3')
+      bgMusicRef.current.loop = true
+      bgMusicRef.current.volume = 0.3
+    }
+    
+    return () => {
+      if (bgMusicRef.current) {
+        bgMusicRef.current.pause()
+        bgMusicRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -57,6 +85,11 @@ export default function BuffaloSlot() {
     if (!user) return
     if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return
     
+    // Play background music on first interaction if not playing
+    if (bgMusicRef.current && bgMusicRef.current.paused && !isMutedRef.current) {
+      bgMusicRef.current.play().catch(console.error)
+    }
+
     setIsSpinning(true)
     setLastWin(null)
     setWinningWays([])
@@ -228,6 +261,31 @@ export default function BuffaloSlot() {
         border: '1px solid rgba(255, 100, 0, 0.4)', display: 'flex', flexDirection: 'column',
         alignItems: 'center', gap: '16px', backdropFilter: 'blur(10px)', zIndex: 100
       }}>
+        {/* Mute Button */}
+        <button
+          onClick={() => setIsMuted(prev => !prev)}
+          style={{
+            position: 'absolute',
+            top: '-40px',
+            right: '0',
+            background: 'rgba(0,0,0,0.6)',
+            border: '2px solid #ffaa00',
+            borderRadius: '50%',
+            width: '40px',
+            height: '40px',
+            color: '#ffaa00',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.2rem',
+            boxShadow: '0 0 10px #ffaa00'
+          }}
+          title={isMuted ? "Unmute Audio" : "Mute Audio"}
+        >
+          {isMuted ? '🔇' : '🔊'}
+        </button>
+
         {/* TOP: Mini Display */}
         <div style={{
           background: '#000', border: '2px solid #333', borderRadius: '8px', padding: '8px 12px',
