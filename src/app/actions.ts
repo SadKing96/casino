@@ -202,15 +202,15 @@ export async function getLeaderboard() {
 export async function loginWithPassword(username: string, password: string, rememberMe: boolean) {
   const user = await prisma.user.findUnique({ where: { username } })
   if (!user) {
-    throw new Error('Invalid username or password')
+    return { error: 'Invalid username or password' }
   }
 
   if (user.passwordHash) {
     const isValid = await bcrypt.compare(password, user.passwordHash)
-    if (!isValid) throw new Error('Invalid username or password')
+    if (!isValid) return { error: 'Invalid username or password' }
   } else if (password) {
     // User has no password set (e.g. guest account) but tried to use a password
-    throw new Error('Invalid username or password')
+    return { error: 'Invalid username or password' }
   }
 
   const cookieStore = await cookies()

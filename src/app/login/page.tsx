@@ -22,8 +22,12 @@ export default function LoginPage() {
     setIsLoading(true)
     
     try {
-      const user = await loginWithPassword(username, password, rememberMe)
-      setUser(user)
+      const res = await loginWithPassword(username, password, rememberMe)
+      if (res?.error) {
+        setError(res.error)
+        return
+      }
+      setUser(res)
       router.push('/')
     } catch (err: any) {
       setError(err.message || 'Login failed')
