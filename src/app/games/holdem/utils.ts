@@ -14,6 +14,7 @@ export type PlayerState = {
   currentBet: number
   status: 'ACTIVE' | 'FOLDED' | 'ALL_IN' | 'OUT'
   isBot: boolean
+  hasActed: boolean
 }
 
 export const SUITS: Card['suit'][] = ['♥️', '♦️', '♠️', '♣️']

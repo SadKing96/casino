@@ -49,7 +49,7 @@ export function Navbar() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: 'var(--foreground)' }}>{user.username}</span>
               <div style={{ background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: 'var(--radius-xl)', border: '1px solid var(--neon-gold)', color: 'var(--neon-gold)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span>💰 Chips:</span> {user.chipBalance.toLocaleString()}
+                <span>💰 Credits:</span> {user.credits.toLocaleString()}
               </div>
             </div>
 

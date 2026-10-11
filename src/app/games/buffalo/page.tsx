@@ -14,7 +14,7 @@ const INITIAL_GRID = [
 ]
 
 export default function BuffaloSlot() {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [grid, setGrid] = useState<string[][]>(INITIAL_GRID)
   const [isSpinning, setIsSpinning] = useState(false)
   const [betAmount, setBetAmount] = useState(10)
@@ -83,7 +83,7 @@ export default function BuffaloSlot() {
 
   const handleSpin = async () => {
     if (!user) return
-    if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return
+    if (!gameState?.isFreeSpinMode && user.credits < betAmount) return
     
     // Play background music on first interaction if not playing
     if (bgMusicRef.current && bgMusicRef.current.paused && !isMutedRef.current) {
@@ -116,7 +116,7 @@ export default function BuffaloSlot() {
   }
 
   const finishSpin = (result: any) => {
-    updateBalances(result.newBalance, user!.bankBalance)
+    updateCredits(result.newBalance)
     setLastWin(result.totalWin)
     setWinningWays(result.winningWays)
     setGameState(result.newState)
@@ -293,7 +293,7 @@ export default function BuffaloSlot() {
           boxShadow: 'inset 0 0 20px rgba(255, 100, 0, 0.2)', width: '100%'
         }}>
           <div style={{ color: '#ffaa00', fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>CREDIT</div>
-          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>
+          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>
         </div>
 
         {/* CENTER: Bet Buttons (3x2 grid) */}
@@ -335,13 +335,13 @@ export default function BuffaloSlot() {
             background: 'linear-gradient(180deg, #ff8800 0%, #883300 100%)', border: 'none',
             boxShadow: '0 0 30px rgba(255, 100, 0, 0.8), inset 0 0 20px #fff', color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 'not-allowed' : 'pointer',
-            opacity: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 0.5 : 1,
+            cursor: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 'not-allowed' : 'pointer',
+            opacity: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 0.5 : 1,
             position: 'relative', transform: isSpinning ? 'scale(0.95)' : 'scale(1)',
             transition: 'all 0.1s', marginTop: '8px'
           }}
           onClick={handleSpin}
-          disabled={isSpinning || (!isFreeSpins && user.chipBalance < betAmount)}
+          disabled={isSpinning || (!isFreeSpins && user.credits < betAmount)}
         >
           <div style={{
             position: 'absolute', inset: '5px', clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)',

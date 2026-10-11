@@ -80,11 +80,16 @@ export async function spinPiggies(betAmount: number) {
   let state = await prisma.piggyState.findUnique({ where: { userId } })
   if (!state) state = await prisma.piggyState.create({ data: { userId } })
 
-  if (!state.isFreeSpinMode && user.chipBalance < betAmount) {
-    throw new Error("Insufficient chip balance")
+  const globalConfig = await prisma.globalConfig.findUnique({ where: { id: 'default' } })
+  const gameOdds = globalConfig?.gameOdds ? JSON.parse(globalConfig.gameOdds) : {}
+  const winMult = gameOdds['slots']?.winRate ?? 1.0
+  const freeSpinsMult = gameOdds['slots']?.freeSpinsRate ?? 1.0
+
+  if (!state.isFreeSpinMode && user.credits < betAmount) {
+    throw new Error("Insufficient credits")
   }
   if (!state.isFreeSpinMode) {
-    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: betAmount } } })
+    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: betAmount } } })
   }
 
   const activeFeatures = JSON.parse(state.activeFeatures) as string[]
@@ -187,15 +192,15 @@ export async function spinPiggies(betAmount: number) {
       for (let c = 0; c < 5; c++) {
         const sym = grid[r][c]
         if (sym === '🔵') {
-          if (Math.random() < 0.1) triggers.BLUE = true
+          if (Math.random() < (0.1 * freeSpinsMult)) triggers.BLUE = true
           else if (newBlue < 100) newBlue++
         }
         if (sym === '🟡') {
-          if (Math.random() < 0.1) triggers.YELLOW = true
+          if (Math.random() < (0.1 * winMult)) triggers.YELLOW = true
           else newYellow++
         }
         if (sym === '🔴') {
-          if (Math.random() < 0.1) triggers.RED = true
+          if (Math.random() < (0.1 * winMult)) triggers.RED = true
           else newRed++
         }
       }
@@ -260,7 +265,7 @@ export async function spinPiggies(betAmount: number) {
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: { 
-      chipBalance: { increment: Math.floor(totalWin) },
+      credits: { increment: Math.floor(totalWin) },
       lastSeenAt: new Date()
     }
   })
@@ -305,6 +310,6 @@ export async function spinPiggies(betAmount: number) {
     triggers,
     jackpotWins,
     newState: updatedState,
-    newBalance: updatedUser.chipBalance
+    newBalance: updatedUser.credits
   }
 }

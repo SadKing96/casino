@@ -57,6 +57,23 @@ export async function getGlobalState() {
   
   return { jackpots, activePlayers: activePlayersList.map(p => p.username) }
 }
+export async function resetFrankensteinGame() {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) return { success: false, error: 'Unauthorized' }
+  
+  await prisma.frankensteinState.update({
+    where: { userId },
+    data: {
+      isFreeSpinMode: false,
+      freeSpinsRemaining: 0,
+      currentMultiplier: 1,
+      persistentMultipliers: JSON.stringify(Array(15).fill(1))
+    }
+  })
+  
+  return { success: true }
+}
 
 export async function getFrankensteinState() {
   const cookieStore = await cookies()
@@ -64,7 +81,14 @@ export async function getFrankensteinState() {
   if (!userId) return null
   let state = await prisma.frankensteinState.findUnique({ where: { userId } })
   if (!state) state = await prisma.frankensteinState.create({ data: { userId } })
-  return state
+  let persistentMultipliers: number[] = []
+  try {
+    persistentMultipliers = JSON.parse(state.persistentMultipliers || "[]")
+  } catch(e) {}
+  if (!Array.isArray(persistentMultipliers) || persistentMultipliers.length !== 15) {
+    persistentMultipliers = Array(15).fill(1)
+  }
+  return { state, persistentMultipliers }
 }
 
 // Spreads wilds to adjacent squares
@@ -92,7 +116,7 @@ function spreadWilds(grid: string[][], r: number, c: number, wildChar: string): 
   return spreads
 }
 
-export async function spinFrankenstein(betAmount: number) {
+export async function spinFrankenstein(betAmount: number, forceOptions?: { forceJackpot?: string, forceFreeSpins?: boolean }) {
   const cookieStore = await cookies()
   const userId = cookieStore.get('userId')?.value
   if (!userId) throw new Error("Unauthorized")
@@ -103,11 +127,16 @@ export async function spinFrankenstein(betAmount: number) {
   let state = await prisma.frankensteinState.findUnique({ where: { userId } })
   if (!state) state = await prisma.frankensteinState.create({ data: { userId } })
 
-  if (!state.isFreeSpinMode && user.chipBalance < betAmount) {
+  const globalConfig = await prisma.globalConfig.findUnique({ where: { id: 'default' } })
+  const gameOdds = globalConfig?.gameOdds ? JSON.parse(globalConfig.gameOdds) : {}
+  const winMult = gameOdds['slots']?.winRate ?? 1.0
+  const freeSpinsMult = gameOdds['slots']?.freeSpinsRate ?? 1.0
+
+  if (!state.isFreeSpinMode && user.credits < betAmount) {
     throw new Error("Insufficient chip balance")
   }
   if (!state.isFreeSpinMode) {
-    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: betAmount } } })
+    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: betAmount } } })
   }
 
   // Generate Base Grid
@@ -116,17 +145,33 @@ export async function spinFrankenstein(betAmount: number) {
   let isFreeSpinMode = state.isFreeSpinMode
   let currentMultiplier = state.currentMultiplier
   let freeSpinsRemaining = state.freeSpinsRemaining
+  let persistentMultipliers: number[] = []
+  try {
+    persistentMultipliers = JSON.parse(state.persistentMultipliers || "[]")
+  } catch(e) {}
+  if (!Array.isArray(persistentMultipliers) || persistentMultipliers.length !== 15) {
+    persistentMultipliers = Array(15).fill(1)
+  }
+  let powerUpTriggered = false
+  let aliveTriggered = false
+  let collectedPrizes: any[] = []
+  const STATIC_PRIZES = [1000, 500, 300, 200, 150, 120, 100, 80, 60]
+  const JACKPOT_NAMES = ['GRAND', 'SUPER', 'MAJOR', 'MAXI', 'MINOR', 'MINI']
 
   let lightningSpreads: {r: number, c: number}[] = []
   let fireSpreads: {r: number, c: number}[] = []
 
   // Add Special Symbols
   if (!isFreeSpinMode) {
-    // Scatters anywhere
+    let forcedScatters = forceOptions?.forceFreeSpins ? 3 : 0
     for (let c = 0; c < 5; c++) {
-      if (Math.random() < 0.1) grid[Math.floor(Math.random() * 3)][c] = '🔥'
+      if (forcedScatters > 0) {
+        grid[Math.floor(Math.random() * 3)][c] = '🔥'
+        forcedScatters--
+      } else if (Math.random() < (0.1 * freeSpinsMult)) {
+        grid[Math.floor(Math.random() * 3)][c] = '🔥'
+      }
     }
-    // Lightning Wilds on 2, 3, 4
     for (let c = 1; c <= 3; c++) {
       if (Math.random() < 0.15) {
         const r = Math.floor(Math.random() * 3)
@@ -137,25 +182,56 @@ export async function spinFrankenstein(betAmount: number) {
       }
     }
   } else {
-    // FREE SPINS MODE
-    // Scatters
     for (let c = 0; c < 5; c++) {
-      if (Math.random() < 0.08) grid[Math.floor(Math.random() * 3)][c] = '🔥'
+      // Extremely rare scatter drops during free spins
+      if (Math.random() < 0.02) grid[Math.floor(Math.random() * 3)][c] = '🔥'
     }
-    // Fire Wild guaranteed on 2, 3, or 4
     const fireCol = Math.floor(Math.random() * 3) + 1
     const fireRow = Math.floor(Math.random() * 3)
     if (grid[fireRow][fireCol] !== '🔥') {
       grid[fireRow][fireCol] = '☄️'
       fireSpreads.push(...spreadWilds(grid, fireRow, fireCol, '☄️'))
     }
-    
-    // Multiplier exclusively on reel 5
     if (currentMultiplier < 5 && Math.random() < 0.3) {
       grid[Math.floor(Math.random() * 3)][4] = '✖️'
       currentMultiplier++
     }
   }
+
+  // --- NEW MECHANICS ---
+  // Reel 1: Power Up or It's Alive
+  const reel1BonusChance = isFreeSpinMode ? 0.35 : (0.1 * winMult)
+  const isForcedJackpot = forceOptions?.forceJackpot && JACKPOT_NAMES.includes(forceOptions.forceJackpot);
+
+  if (Math.random() < reel1BonusChance || forceOptions?.forceJackpot === 'POWER' || forceOptions?.forceJackpot === 'ALIVE' || isForcedJackpot) {
+    const r = Math.floor(Math.random() * 3)
+    if (Math.random() < 0.3 || forceOptions?.forceJackpot === 'POWER' || isForcedJackpot) {
+      grid[r][0] = 'POWER'
+      powerUpTriggered = true
+    } else {
+      grid[r][0] = 'ALIVE'
+      aliveTriggered = true
+    }
+  }
+
+  // Reels 2-5: Blue / Orange Heads
+  for (let c = 1; c < 5; c++) {
+    if (Math.random() < 0.15 || isForcedJackpot) {
+      const r = Math.floor(Math.random() * 3)
+      if (Math.random() < 0.2 || isForcedJackpot) grid[r][c] = 'ORANGE'
+      else grid[r][c] = 'BLUE'
+    }
+  }
+
+  // Evaluate Power Up
+  if (powerUpTriggered) {
+    const numToPower = Math.floor(Math.random() * 4) + 3 // 3 to 6 boxes
+    for (let i = 0; i < numToPower; i++) {
+      const idx = Math.floor(Math.random() * 15)
+      persistentMultipliers[idx] += Math.floor(Math.random() * 3) + 1
+    }
+  }
+
 
   // Scatter Evaluation
   let scatterCount = 0
@@ -172,8 +248,8 @@ export async function spinFrankenstein(betAmount: number) {
     freeSpinsRemaining = 10
     currentMultiplier = 1
   } else if (isFreeSpinMode) {
-    if (scatterCount === 2) freeSpinsRemaining += 5
-    else if (scatterCount >= 3) freeSpinsRemaining += 10
+    // Need a full 3 scatters to re-trigger, which is very rare now
+    if (scatterCount >= 3) freeSpinsRemaining += 10
   }
 
   // Payline Evaluation
@@ -234,28 +310,56 @@ export async function spinFrankenstein(betAmount: number) {
     }
   })
 
-  // Random Jackpot Trigger
-  let jackpotWon: string | null = null
-  let jackpotAmount = 0
-  if (Math.random() < 0.01) { // 1% chance for any jackpot
-    const r = Math.random()
-    if (r < 0.5) jackpotWon = 'MINI'
-    else if (r < 0.8) jackpotWon = 'MINOR'
-    else if (r < 0.95) jackpotWon = 'MAXI'
-    else if (r < 0.98) jackpotWon = 'SUPER'
-    else if (r < 0.995) jackpotWon = 'MAJOR'
-    else jackpotWon = 'GRAND'
-    
-    jackpotAmount = updatedJackpots[jackpotWon.toLowerCase() as keyof typeof updatedJackpots] as number
-    
-    // Reset that specific tier
+  // Evaluate Pyramids
+  let jackpotWinAmount = 0
+  let jackpotsToReset: string[] = []
+  
+  if (aliveTriggered || powerUpTriggered) {
+    for (let c = 1; c < 5; c++) {
+      for (let r = 0; r < 3; r++) {
+        if (grid[r][c] === 'BLUE') {
+          const blueIdx = Math.floor(Math.random() * STATIC_PRIZES.length)
+          const globalIdx = 6 + blueIdx
+          const mult = persistentMultipliers[globalIdx]
+          const win = STATIC_PRIZES[blueIdx] * mult
+          lineWinTotal += win
+          collectedPrizes.push({ c, amount: win, isJackpot: false, mult, prizeName: STATIC_PRIZES[blueIdx].toString() })
+          persistentMultipliers[globalIdx] = 1
+        } else if (grid[r][c] === 'ORANGE') {
+          const rand = Math.random()
+          let jIdx = 5 // MINI
+          if (rand > 0.98) jIdx = 0 // GRAND
+          else if (rand > 0.94) jIdx = 1 // SUPER
+          else if (rand > 0.85) jIdx = 2 // MAJOR
+          else if (rand > 0.70) jIdx = 3 // MAXI
+          else if (rand > 0.45) jIdx = 4 // MINOR
+
+          const isForcedJackpot = forceOptions?.forceJackpot && JACKPOT_NAMES.includes(forceOptions.forceJackpot);
+          if (isForcedJackpot) {
+            jIdx = JACKPOT_NAMES.indexOf(forceOptions!.forceJackpot!);
+          }
+
+          const tier = JACKPOT_NAMES[jIdx]
+          const mult = persistentMultipliers[jIdx]
+          const baseJackpot = updatedJackpots[tier.toLowerCase() as keyof typeof updatedJackpots] as number
+          const win = baseJackpot * mult
+          jackpotWinAmount += win
+          collectedPrizes.push({ c, amount: win, isJackpot: true, jackpotName: tier, mult })
+          persistentMultipliers[jIdx] = 1
+          jackpotsToReset.push(tier.toLowerCase())
+        }
+      }
+    }
+  }
+
+  for (const tier of jackpotsToReset) {
     await prisma.globalJackpot.update({
       where: { id: 'frankenstein' },
-      data: { [jackpotWon.toLowerCase()]: SEED_VALUES[jackpotWon as keyof typeof SEED_VALUES] }
+      data: { [tier]: SEED_VALUES[tier.toUpperCase() as keyof typeof SEED_VALUES] }
     })
   }
 
-  const totalWin = lineWinTotal + jackpotAmount
+  const totalWin = lineWinTotal + jackpotWinAmount
 
   // Update state
   if (isFreeSpinMode && !triggerFreeSpins) {
@@ -270,7 +374,7 @@ export async function spinFrankenstein(betAmount: number) {
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: { 
-      chipBalance: { increment: Math.floor(totalWin) },
+      credits: { increment: Math.floor(totalWin) },
       lastSeenAt: new Date()
     }
   })
@@ -280,7 +384,8 @@ export async function spinFrankenstein(betAmount: number) {
     data: {
       isFreeSpinMode,
       freeSpinsRemaining,
-      currentMultiplier
+      currentMultiplier,
+      persistentMultipliers: JSON.stringify(persistentMultipliers)
     }
   })
 
@@ -289,7 +394,7 @@ export async function spinFrankenstein(betAmount: number) {
       userId,
       bet: state.isFreeSpinMode ? 0 : betAmount,
       win: totalWin,
-      result: JSON.stringify({ grid, winningLines, jackpotWon, scatterCount })
+      result: JSON.stringify({ grid, winningLines, jackpotWon: null, scatterCount })
     }
   })
 
@@ -297,13 +402,14 @@ export async function spinFrankenstein(betAmount: number) {
     grid,
     totalWin,
     lineWinTotal,
-    jackpotWon,
-    jackpotAmount,
+    jackpotWon: null,
+    jackpotAmount: jackpotWinAmount,
     winningLines,
     lightningSpreads,
     fireSpreads,
+    collectedPrizes,
     newState: updatedState,
-    newBalance: updatedUser.chipBalance,
+    newBalance: updatedUser.credits,
     triggerFreeSpins,
     scatterCount
   }

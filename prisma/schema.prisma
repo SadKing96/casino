@@ -12,8 +12,7 @@ model User {
   username  String   @unique
   passwordHash String?
   requiresPasswordReset Boolean @default(false)
-  chipBalance Int      @default(0)
-  bankBalance Int      @default(1000)
+  credits Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   lastSeenAt DateTime @default(now())
@@ -21,7 +20,6 @@ model User {
   piggyState PiggyState?
   frankState FrankensteinState?
   buffaloState BuffaloState?
-  blackjackState BlackjackState?
   role      String   @default("PLAYER") // ADMIN, BANNED, PLAYER
   transactions Transaction[]
   gameHistory  GameHistory[]
@@ -76,6 +74,7 @@ model FrankensteinState {
   freeSpinsRemaining Int      @default(0)
   currentMultiplier  Int      @default(1)
   jackpotProgress    String   @default("{}")
+  persistentMultipliers String @default("[]")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -101,16 +100,15 @@ model BuffaloState {
   updatedAt          DateTime @updatedAt
 }
 
-model BlackjackState {
+model BlackjackTable {
   id                 String   @id @default(cuid())
-  userId             String   @unique
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status             String   @default("BETTING") // BETTING, PLAYER_TURN, DEALER_TURN, GAME_OVER
-  playerHands        String   @default("[[]]") // Array of arrays for splits
+  name               String   @default("Blackjack Table")
+  status             String   @default("BETTING") // BETTING, PLAYING, RESOLVED
   dealerHand         String   @default("[]")
-  currentHandIndex   Int      @default(0)
-  currentBet         Int      @default(0)
-  chatHistory        String   @default("[]") // Array of chat messages
+  shoe               String   @default("[]")
+  playerStates       String   @default("{}") // JSON mapping of userId -> PlayerState
+  timerEndsAt        DateTime?
+  chatHistory        String   @default("[]")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -206,6 +204,7 @@ model GlobalConfig {
   enabledGames       String   @default("[]") // JSON array of enabled game IDs
   gameOdds           String   @default("{}") // JSON object of house edge overrides
   houseBankBalance   Float    @default(1000000)
+  sportsApiKey       String   @default("")
   updatedAt          DateTime @updatedAt
 }
 
@@ -229,4 +228,17 @@ model GameHistory {
   payout             Int
   details            String   @default("{}") // JSON details of the hand/spin
   createdAt          DateTime @default(now())
+}
+
+model SportsBet {
+  id                 String   @id @default(cuid())
+  userId             String
+  eventId            String
+  sportKey           String   @default("")
+  team               String
+  odds               Float
+  amount             Int
+  status             String   @default("PENDING") // PENDING, WON, LOST
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }

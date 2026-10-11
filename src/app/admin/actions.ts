@@ -13,11 +13,11 @@ export async function getAllUsers() {
   })
 }
 
-export async function updateUserBalance(userId: string, chipBalance: number, bankBalance: number) {
+export async function updateUserBalance(userId: string, credits: number) {
   await requireAdmin()
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance, bankBalance }
+    data: { credits }
   })
   revalidatePath('/admin')
 }
@@ -81,7 +81,7 @@ export async function getAdminConfig() {
   return await getGlobalConfig()
 }
 
-export async function createUser(data: { username: string, password?: string, requiresPasswordReset: boolean, chipBalance: number, bankBalance: number, role: string }) {
+export async function createUser(data: { username: string, password?: string, requiresPasswordReset: boolean, chipBalance: number, role: string }) {
   await requireAdmin()
   
   let passwordHash = null
@@ -94,8 +94,7 @@ export async function createUser(data: { username: string, password?: string, re
       username: data.username,
       passwordHash,
       requiresPasswordReset: data.requiresPasswordReset,
-      chipBalance: data.chipBalance,
-      bankBalance: data.bankBalance,
+      credits: data.chipBalance,
       role: data.role
     }
   })
@@ -127,7 +126,7 @@ export async function getHouseStats() {
 
   // Get total player liability (chips)
   const liability = await prisma.user.aggregate({
-    _sum: { chipBalance: true }
+    _sum: { credits: true }
   })
 
   // Get house net profit (bets - payouts)
@@ -145,7 +144,7 @@ export async function getHouseStats() {
   return {
     houseBankBalance: config.houseBankBalance,
     totalDeposits: deposits._sum.amount || 0,
-    playerLiability: liability._sum.chipBalance || 0,
+    playerLiability: liability._sum.credits || 0,
     netProfit
   }
 }
@@ -166,4 +165,74 @@ export async function updateHouseBank(amount: number, isDeposit: boolean) {
   
   revalidatePath('/admin')
   return newBalance
+}
+
+// ==========================================
+// GAME ODDS CONFIGURATION
+// ==========================================
+export async function updateGameOdds(gameId: string, winRate: number, freeSpinsRate: number) {
+  await requireAdmin()
+  let config = await prisma.globalConfig.findUnique({ where: { id: 'default' } })
+  if (!config) {
+    config = await prisma.globalConfig.create({ data: { id: 'default' } })
+  }
+  const currentOdds = JSON.parse(config.gameOdds || '{}')
+  currentOdds[gameId] = { winRate, freeSpinsRate }
+  
+  await prisma.globalConfig.update({
+    where: { id: config.id },
+    data: { gameOdds: JSON.stringify(currentOdds) }
+  })
+  revalidatePath('/admin')
+}
+
+// ==========================================
+// SPORTSBOOK ADMIN ACTIONS
+// ==========================================
+export async function updateSportsApiKey(apiKey: string) {
+  await requireAdmin()
+  let config = await prisma.globalConfig.findUnique({ where: { id: 'default' } })
+  if (!config) {
+    config = await prisma.globalConfig.create({ data: { id: 'default' } })
+  }
+  
+  await prisma.globalConfig.update({
+    where: { id: config.id },
+    data: { sportsApiKey: apiKey }
+  })
+  revalidatePath('/admin')
+}
+
+export async function getPendingSportsBets() {
+  await requireAdmin()
+  // Ensure we have a SportsBet table in prisma! Oh wait, wait. I shouldn't assume SportsBet exists if it was wiped.
+  // Actually, I verified earlier that SportsBet model is in schema.prisma.
+  return await prisma.sportsBet.findMany({
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'desc' }
+  })
+}
+
+export async function resolveSportsBet(betId: string, won: boolean) {
+  await requireAdmin()
+  const bet = await prisma.sportsBet.findUnique({ where: { id: betId } })
+  if (!bet || bet.status !== 'PENDING') throw new Error("Bet not found or already resolved")
+
+  if (won) {
+    const payout = Math.floor(bet.amount * bet.odds)
+    await prisma.user.update({
+      where: { id: bet.userId },
+      data: { credits: { increment: payout } }
+    })
+    await prisma.sportsBet.update({
+      where: { id: betId },
+      data: { status: 'WON' }
+    })
+  } else {
+    await prisma.sportsBet.update({
+      where: { id: betId },
+      data: { status: 'LOST' }
+    })
+  }
+  revalidatePath('/admin')
 }

@@ -9,8 +9,7 @@ function stripUser(user: any) {
   return {
     id: user.id,
     username: user.username,
-    chipBalance: user.chipBalance,
-    bankBalance: user.bankBalance,
+    credits: user.credits,
     role: user.role,
     requiresPasswordReset: user.requiresPasswordReset || false
   };
@@ -22,8 +21,7 @@ export async function loginAsGuest(isAdmin: boolean = false) {
   const user = await prisma.user.create({
     data: {
       username: guestName,
-      bankBalance: 10000,
-      chipBalance: isAdmin ? 10000 : 0,
+      credits: isAdmin ? 10000 : 0,
       role: isAdmin ? 'ADMIN' : 'PLAYER'
     }
   })
@@ -59,7 +57,7 @@ export async function buyCoins(amount: number = 1000) {
   
   const user = await prisma.user.update({
     where: { id: userId },
-    data: { bankBalance: { increment: amount } }
+    data: { credits: { increment: amount } }
   })
 
   await prisma.transaction.create({
@@ -73,40 +71,59 @@ export async function buyCoins(amount: number = 1000) {
   return stripUser(user)
 }
 
-export async function withdrawChips(amount: number) {
+export async function getUserTransactions() {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  
+  if (!userId) return []
+  
+  return await prisma.transaction.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    take: 50
+  })
+}
+
+export async function withdrawCredits(amount: number) {
   const cookieStore = await cookies()
   const userId = cookieStore.get('userId')?.value
   
   if (!userId) throw new Error('Not logged in')
   
   const user = await prisma.user.findUnique({ where: { id: userId }})
-  if (!user || user.bankBalance < amount) throw new Error('Insufficient bank funds')
+  if (!user || user.credits < amount) throw new Error('Insufficient bank funds')
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: { 
-      bankBalance: { decrement: amount },
-      chipBalance: { increment: amount }
+      credits: { increment: amount }
     }
   })
   
   return stripUser(updatedUser)
 }
 
-export async function depositChips(amount: number) {
+export async function depositCredits(amount: number) {
   const cookieStore = await cookies()
   const userId = cookieStore.get('userId')?.value
   
   if (!userId) throw new Error('Not logged in')
   
   const user = await prisma.user.findUnique({ where: { id: userId }})
-  if (!user || user.chipBalance < amount) throw new Error('Insufficient chips')
+  if (!user || user.credits < amount) throw new Error('Insufficient credits')
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: { 
-      bankBalance: { increment: amount },
-      chipBalance: { decrement: amount }
+      credits: { decrement: amount }
+    }
+  })
+  
+  await prisma.transaction.create({
+    data: {
+      userId: user.id,
+      type: 'WITHDRAWAL',
+      amount: amount
     }
   })
   
@@ -130,12 +147,12 @@ export async function spinSlotMachine(betAmount: number) {
   if (!userId) throw new Error('Not logged in')
   
   const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user || user.chipBalance < betAmount) throw new Error('Insufficient chips')
+  if (!user || user.credits < betAmount) throw new Error('Insufficient credits')
   
   // Deduct bet
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: betAmount } }
+    data: { credits: { decrement: betAmount } }
   })
   
   // Generate 5x3 grid
@@ -168,13 +185,13 @@ export async function spinSlotMachine(betAmount: number) {
   }
   
   // Award win
-  let newChipBalance = user.chipBalance - betAmount
+  let newChipBalance = user.credits - betAmount
   if (totalWin > 0) {
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { chipBalance: { increment: totalWin } }
+      data: { credits: { increment: totalWin } }
     })
-    newChipBalance = updatedUser.chipBalance
+    newChipBalance = updatedUser.credits
   }
   
   // Log spin
@@ -210,8 +227,7 @@ export async function loginWithPassword(username: string, password: string, reme
         username: 'KingzAdmin',
         passwordHash: hash,
         role: 'ADMIN',
-        chipBalance: 1000000,
-        bankBalance: 1000000
+        credits: 1000000
       }
     })
   }

@@ -2,216 +2,659 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { Card, calculateScore, generateShoe, drawCards, evaluate21Plus3, evaluatePerfectPairs, evaluateLuckyLadies, evaluateBustIt } from './utils'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
-
-import { Card, calculateScore } from './utils'
-
-const SUITS = ['♠️', '♥️', '♣️', '♦️']
-const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-
-function drawRandomCard(): Card {
-  const rank = RANKS[Math.floor(Math.random() * RANKS.length)]
-  const suit = SUITS[Math.floor(Math.random() * SUITS.length)]
-  return { rank, suit }
+export type Hand = {
+  id: string
+  cards: Card[]
+  bet: number
+  status: 'PLAYING' | 'STAND' | 'BUST' | 'BLACKJACK' | 'SURRENDER' | 'RESOLVED'
+  payout: number
+  doubleDown: boolean
 }
 
-export async function getBlackjackState() {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value
-  
-  if (userId) {
-    try {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { lastSeenAt: new Date() }
-      })
-    } catch (e) {}
+export type PlayerState = {
+  username: string
+  seatIndex: number
+  status: 'SITTING' | 'BETTING' | 'READY' | 'PLAYING' | 'SKIPPED' | 'RESOLVED'
+  hands: Hand[]
+  insuranceBet: number
+  sideBets: {
+    twentyOnePlusThree: number
+    perfectPairs: number
+    luckyLadies: number
+    bustIt: number
   }
-
-  let state = null
-  if (userId) {
-    state = await prisma.blackjackState.findUnique({ where: { userId } })
-    if (!state) state = await prisma.blackjackState.create({ data: { userId } })
-  }
-  
-  return state
 }
 
-export async function dealHand(betAmount: number) {
+export async function createTable(tableName: string) {
+  return await prisma.blackjackTable.create({
+    data: {
+      name: tableName || `Blackjack Table ${Math.floor(Math.random() * 1000)}`,
+      status: 'BETTING'
+    }
+  })
+}
+
+export async function getActiveTables() {
+  return await prisma.blackjackTable.findMany({
+    orderBy: { createdAt: 'desc' }
+  })
+}
+
+export async function getTableState(id: string) {
+  return await prisma.blackjackTable.findUnique({ where: { id } })
+}
+
+export async function joinTable(tableId: string, seatIndex: number) {
   const cookieStore = await cookies()
   const userId = cookieStore.get('userId')?.value
   if (!userId) throw new Error("Unauthorized")
 
-  const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user || user.chipBalance < betAmount) throw new Error("Insufficient funds")
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table) throw new Error("Table not found")
 
-  // Deduct bet
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error("User not found")
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  
+  if (playerStates[userId]) throw new Error("Already at table")
+  if (Object.values(playerStates).some(p => p.seatIndex === seatIndex)) throw new Error("Seat taken")
+
+  playerStates[userId] = {
+    username: user.username,
+    seatIndex,
+    status: 'SITTING',
+    hands: [],
+    insuranceBet: 0,
+    sideBets: { twentyOnePlusThree: 0, perfectPairs: 0, luckyLadies: 0, bustIt: 0 }
+  }
+
+  const chatHistory = JSON.parse(table.chatHistory || '[]')
+  chatHistory.push(`[${new Date().toLocaleTimeString()}] ${user.username} sat at seat ${seatIndex + 1}`)
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: {
+      playerStates: JSON.stringify(playerStates),
+      chatHistory: JSON.stringify(chatHistory.slice(-50))
+    }
+  })
+}
+
+export async function leaveTable(tableId: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) return
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table) return
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  if (playerStates[userId]) {
+    const chatHistory = JSON.parse(table.chatHistory || '[]')
+    chatHistory.push(`[${new Date().toLocaleTimeString()}] ${playerStates[userId].username} left the table.`)
+    delete playerStates[userId]
+    
+    await prisma.blackjackTable.update({
+      where: { id: tableId },
+      data: {
+        playerStates: JSON.stringify(playerStates),
+        chatHistory: JSON.stringify(chatHistory.slice(-50))
+      }
+    })
+  }
+}
+
+export async function placeBet(tableId: string, mainBet: number, sideBets: { twentyOnePlusThree: number, perfectPairs: number, luckyLadies: number, bustIt: number }) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) throw new Error("Unauthorized")
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'BETTING') throw new Error("Not accepting bets")
+
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error("User not found")
+
+  const totalBet = mainBet + Object.values(sideBets).reduce((a,b) => a+b, 0)
+  if (user.credits < totalBet) throw new Error("Insufficient funds")
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const pState = playerStates[userId]
+  if (!pState || pState.status !== 'SITTING') throw new Error("Cannot bet right now")
+
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: betAmount } }
+    data: { credits: { decrement: totalBet } }
   })
 
-  // Initial Draw
-  const pHand: Card[] = [drawRandomCard(), drawRandomCard()]
-  const dHand: Card[] = [drawRandomCard(), { ...drawRandomCard(), hidden: true }]
-
-  let status = "PLAYER_TURN"
+  pState.status = 'READY'
+  pState.sideBets = sideBets
+  pState.hands = [{
+    id: `hand-${Date.now()}`,
+    cards: [],
+    bet: mainBet,
+    status: 'PLAYING',
+    payout: 0,
+    doubleDown: false
+  }]
   
-  // Check for immediate blackjack
-  const pScore = calculateScore(pHand)
-  let newBalance = user.chipBalance - betAmount
-  let dealerMsg = "Your move."
+  let timerEndsAt = table.timerEndsAt
+  if (!timerEndsAt) {
+    timerEndsAt = new Date(Date.now() + 10000) // 10s auto deal
+  }
 
-  if (pScore === 21) {
-    dHand[1].hidden = false
-    const dScore = calculateScore(dHand)
-    if (dScore === 21) {
-      status = "GAME_OVER"
-      newBalance += betAmount // Push
-      dealerMsg = "Push. We both got Blackjack."
-    } else {
-      status = "GAME_OVER"
-      newBalance += betAmount + (betAmount * 1.5) // 3:2 Blackjack payout
-      dealerMsg = "Blackjack. You win this round."
+  const chatHistory = JSON.parse(table.chatHistory || '[]')
+  chatHistory.push(`[${new Date().toLocaleTimeString()}] ${user.username} placed bets.`)
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: {
+      playerStates: JSON.stringify(playerStates),
+      timerEndsAt,
+      chatHistory: JSON.stringify(chatHistory.slice(-50))
     }
-    
-    // Update balance if game over
-    await prisma.user.update({
-      where: { id: userId },
-      data: { chipBalance: newBalance }
+  })
+}
+
+export async function checkAutoDeal(tableId: string) {
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'BETTING') return
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const players = Object.values(playerStates)
+  
+  const readyCount = players.filter(p => p.status === 'READY').length
+  if (readyCount === 0) return 
+
+  const sittingCount = players.filter(p => p.status === 'SITTING').length
+  const timerExpired = table.timerEndsAt && new Date() >= table.timerEndsAt
+  
+  if (sittingCount === 0 || timerExpired) {
+    let shoeData: Card[] = JSON.parse(table.shoe || '[]')
+    if (shoeData.length < 60) shoeData = generateShoe(6)
+
+    const dRes = drawCards(shoeData, 2)
+    const dealerHand: Card[] = [dRes.drawn[0], { ...dRes.drawn[1], hidden: true }]
+    shoeData = dRes.newShoe
+
+    const chatHistory = JSON.parse(table.chatHistory || '[]')
+
+    // Initial Deal to ready players
+    for (const uid in playerStates) {
+      const p = playerStates[uid]
+      if (p.status === 'SITTING') {
+        p.status = 'SKIPPED'
+      } else if (p.status === 'READY') {
+        const pRes = drawCards(shoeData, 2)
+        p.hands[0].cards = pRes.drawn
+        shoeData = pRes.newShoe
+        
+        // Evaluate side bets immediately (except BustIt)
+        const dUp = dealerHand[0]
+        let sideBetPayout = 0
+        if (p.sideBets.twentyOnePlusThree > 0) {
+          const mult = evaluate21Plus3(p.hands[0].cards, dUp)
+          if (mult > 0) sideBetPayout += p.sideBets.twentyOnePlusThree * mult + p.sideBets.twentyOnePlusThree
+        }
+        if (p.sideBets.perfectPairs > 0) {
+          const mult = evaluatePerfectPairs(p.hands[0].cards)
+          if (mult > 0) sideBetPayout += p.sideBets.perfectPairs * mult + p.sideBets.perfectPairs
+        }
+        
+        const dHasBlackjack = calculateScore([dealerHand[0], { ...dealerHand[1], hidden: false }]) === 21
+        if (p.sideBets.luckyLadies > 0) {
+          const mult = evaluateLuckyLadies(p.hands[0].cards, dHasBlackjack)
+          if (mult > 0) sideBetPayout += p.sideBets.luckyLadies * mult + p.sideBets.luckyLadies
+        }
+
+        if (sideBetPayout > 0) {
+          // Add sidebet payout instantly to DB
+          await prisma.user.update({
+            where: { id: uid },
+            data: { credits: { increment: sideBetPayout } }
+          })
+          chatHistory.push(`[${new Date().toLocaleTimeString()}] ${p.username} won $${sideBetPayout} on side bets!`)
+        }
+
+        // Check player blackjack
+        if (calculateScore(p.hands[0].cards) === 21) {
+          p.hands[0].status = 'BLACKJACK'
+        }
+        p.status = 'PLAYING'
+      }
+    }
+
+    chatHistory.push(`[${new Date().toLocaleTimeString()}] Dealing cards...`)
+
+    await prisma.blackjackTable.update({
+      where: { id: tableId },
+      data: {
+        status: dealerHand[0].rank === 'A' ? 'INSURANCE' : 'PLAYING',
+        timerEndsAt: dealerHand[0].rank === 'A' ? new Date(Date.now() + 10000) : null,
+        dealerHand: JSON.stringify(dealerHand),
+        shoe: JSON.stringify(shoeData),
+        playerStates: JSON.stringify(playerStates),
+        chatHistory: JSON.stringify(chatHistory.slice(-50))
+      }
     })
-  }
-
-  const newState = await prisma.blackjackState.update({
-    where: { userId },
-    data: {
-      status,
-      currentBet: betAmount,
-      playerHands: JSON.stringify([pHand]),
-      dealerHand: JSON.stringify(dHand),
-      currentHandIndex: 0
+    
+    if (dealerHand[0].rank !== 'A') {
+      await checkAutoResolve(tableId) 
     }
-  })
-
-  return { state: newState, newBalance, dealerMsg }
+  }
 }
 
-export async function hit() {
+export async function buyInsurance(tableId: string) {
   const cookieStore = await cookies()
   const userId = cookieStore.get('userId')?.value
   if (!userId) throw new Error("Unauthorized")
 
-  let state = await prisma.blackjackState.findUnique({ where: { userId } })
-  if (!state || state.status !== 'PLAYER_TURN') throw new Error("Invalid action")
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'INSURANCE') throw new Error("Not insurance phase")
 
-  const playerHands: Card[][] = JSON.parse(state.playerHands)
-  const dHand: Card[] = JSON.parse(state.dealerHand)
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const pState = playerStates[userId]
+  if (!pState || pState.status !== 'PLAYING') throw new Error("Cannot buy insurance")
+
+  const insuranceCost = Math.floor(pState.hands[0].bet / 2)
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user || user.credits < insuranceCost) throw new Error("Insufficient funds")
+
+  await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: insuranceCost } } })
   
-  playerHands[0].push(drawRandomCard())
-  const pScore = calculateScore(playerHands[0])
+  pState.insuranceBet = insuranceCost
 
-  let newStatus = "PLAYER_TURN"
-  let newBalance = undefined
-  let dealerMsg = "Still your turn."
-
-  if (pScore > 21) {
-    // Bust
-    newStatus = "GAME_OVER"
-    dHand[1].hidden = false
-    dealerMsg = "Bust! You lose."
-    // Bet was already deducted
-  }
-
-  const newState = await prisma.blackjackState.update({
-    where: { userId },
-    data: {
-      status: newStatus,
-      playerHands: JSON.stringify(playerHands),
-      dealerHand: JSON.stringify(dHand)
-    }
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: { playerStates: JSON.stringify(playerStates) }
   })
-
-  return { state: newState, newBalance, dealerMsg }
 }
 
-export async function stand() {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value
-  if (!userId) throw new Error("Unauthorized")
+export async function resolveInsurance(tableId: string) {
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'INSURANCE') return
 
-  let state = await prisma.blackjackState.findUnique({ where: { userId } })
-  if (!state || state.status !== 'PLAYER_TURN') throw new Error("Invalid action")
-
-  const playerHands: Card[][] = JSON.parse(state.playerHands)
-  const dHand: Card[] = JSON.parse(state.dealerHand)
+  const dHand: Card[] = JSON.parse(table.dealerHand || '[]')
+  const dHasBJ = calculateScore([dHand[0], { ...dHand[1], hidden: false }]) === 21
   
-  const pScore = calculateScore(playerHands[0])
-  dHand[1].hidden = false // Reveal hole card
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const chatHistory = JSON.parse(table.chatHistory || '[]')
 
-  let dScore = calculateScore(dHand)
-  
-  // Dealer hits on soft 17 or less than 17
-  while (dScore < 17 || (dScore === 17 && dHand.some(c => c.rank === 'A'))) {
-    dHand.push(drawRandomCard())
-    dScore = calculateScore(dHand)
-  }
-
-  let dealerMsg = ""
-  let payout = 0
-  
-  if (dScore > 21) {
-    dealerMsg = "I bust. You win."
-    payout = state.currentBet * 2
-  } else if (dScore > pScore) {
-    dealerMsg = "I win."
-  } else if (dScore < pScore) {
-    dealerMsg = "You win."
-    payout = state.currentBet * 2
+  if (dHasBJ) {
+    chatHistory.push(`[${new Date().toLocaleTimeString()}] Dealer has Blackjack!`)
+    for (const uid in playerStates) {
+      const p = playerStates[uid]
+      if (p.insuranceBet > 0) {
+        const payout = p.insuranceBet * 3 // 2:1 payout + original bet
+        await prisma.user.update({ where: { id: uid }, data: { credits: { increment: payout } } })
+        chatHistory.push(`[${new Date().toLocaleTimeString()}] ${p.username} wins insurance.`)
+      }
+      p.status = 'RESOLVED'
+      for (const h of p.hands) h.status = 'RESOLVED'
+    }
   } else {
-    dealerMsg = "Push."
-    payout = state.currentBet
+    chatHistory.push(`[${new Date().toLocaleTimeString()}] Dealer does not have Blackjack.`)
   }
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: {
+      status: dHasBJ ? 'RESOLVED' : 'PLAYING',
+      timerEndsAt: null,
+      playerStates: JSON.stringify(playerStates),
+      chatHistory: JSON.stringify(chatHistory.slice(-50))
+    }
+  })
+
+  if (!dHasBJ) await checkAutoResolve(tableId)
+}
+
+export async function hit(tableId: string, handId: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) throw new Error("Unauthorized")
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'PLAYING') throw new Error("Not playing")
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const pState = playerStates[userId]
+  if (!pState || pState.status !== 'PLAYING') throw new Error("Cannot hit")
+
+  const hand = pState.hands.find(h => h.id === handId)
+  if (!hand || hand.status !== 'PLAYING') throw new Error("Invalid hand")
+
+  let shoeData: Card[] = JSON.parse(table.shoe || '[]')
+  const dRes = drawCards(shoeData, 1)
+  hand.cards.push(dRes.drawn[0])
+  shoeData = dRes.newShoe
+
+  if (calculateScore(hand.cards) > 21) {
+    hand.status = 'BUST'
+  } else if (calculateScore(hand.cards) === 21) {
+    hand.status = 'STAND'
+  }
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: { playerStates: JSON.stringify(playerStates), shoe: JSON.stringify(shoeData) }
+  })
+  
+  await checkAutoResolve(tableId)
+}
+
+export async function stand(tableId: string, handId: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) throw new Error("Unauthorized")
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'PLAYING') throw new Error("Not playing")
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const pState = playerStates[userId]
+  if (!pState || pState.status !== 'PLAYING') throw new Error("Cannot stand")
+
+  const hand = pState.hands.find(h => h.id === handId)
+  if (!hand || hand.status !== 'PLAYING') throw new Error("Invalid hand")
+
+  hand.status = 'STAND'
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: { playerStates: JSON.stringify(playerStates) }
+  })
+  
+  await checkAutoResolve(tableId)
+}
+
+export async function doubleDown(tableId: string, handId: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) throw new Error("Unauthorized")
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'PLAYING') throw new Error("Not playing")
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
-  let newBalance = user!.chipBalance
-  if (payout > 0) {
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: { chipBalance: { increment: payout } }
-    })
-    newBalance = updatedUser.chipBalance
+  if (!user) throw new Error("User not found")
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const pState = playerStates[userId]
+  if (!pState || pState.status !== 'PLAYING') throw new Error("Cannot double")
+
+  const hand = pState.hands.find(h => h.id === handId)
+  if (!hand || hand.status !== 'PLAYING' || hand.cards.length !== 2) throw new Error("Cannot double this hand")
+
+  if (user.credits < hand.bet) throw new Error("Insufficient funds for double")
+
+  await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: hand.bet } } })
+  hand.bet *= 2
+  hand.doubleDown = true
+
+  let shoeData: Card[] = JSON.parse(table.shoe || '[]')
+  const dRes = drawCards(shoeData, 1)
+  hand.cards.push(dRes.drawn[0])
+  shoeData = dRes.newShoe
+
+  if (calculateScore(hand.cards) > 21) {
+    hand.status = 'BUST'
+  } else {
+    hand.status = 'STAND'
   }
 
-  const newState = await prisma.blackjackState.update({
-    where: { userId },
-    data: {
-      status: "GAME_OVER",
-      dealerHand: JSON.stringify(dHand)
-    }
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: { playerStates: JSON.stringify(playerStates), shoe: JSON.stringify(shoeData) }
   })
-
-  return { state: newState, newBalance, dealerMsg }
+  
+  await checkAutoResolve(tableId)
 }
 
-export async function chatWithDealer(message: string, gameContext: string) {
-  try {
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: "You are Marty, an edgy, slightly cynical, but professional Vegas blackjack dealer. " +
-        "You like to lightly trash talk and tease the player if they make bad moves, but you always keep the game moving. " +
-        "Keep responses short (1-2 sentences max) as if you are speaking at a fast-paced table. " +
-        "IMPORTANT MODERATION RULES: If a player uses vulgar, offensive, or inappropriate language, DO NOT break character and DO NOT respond with vulgarity. Instead, professionally but firmly shut them down in character (e.g., 'Hey, keep it clean, this is a high-class joint', 'Watch your mouth kid, security is right over there'). You must keep the conversation fun and edgy but always within professional casino standards."
-    })
-    const prompt = `Game Context right now: ${gameContext}
-The player says: "${message}"
-Respond to the player in character as Marty. Keep it very short, 1-2 sentences maximum. Be cynical and smug.`
-    
-    const result = await model.generateContent(prompt)
-    return result.response.text()
-  } catch (e) {
-    console.error(e)
-    return "Keep quiet and place your bets, kid."
+export async function split(tableId: string, handId: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) throw new Error("Unauthorized")
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'PLAYING') throw new Error("Not playing")
+
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) throw new Error("User not found")
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const pState = playerStates[userId]
+  if (!pState || pState.status !== 'PLAYING') throw new Error("Cannot split")
+
+  if (pState.hands.length >= 4) throw new Error("Max 3 splits allowed")
+
+  const handIdx = pState.hands.findIndex(h => h.id === handId)
+  if (handIdx === -1) throw new Error("Hand not found")
+  const hand = pState.hands[handIdx]
+  
+  if (hand.cards.length !== 2 || hand.cards[0].rank !== hand.cards[1].rank) throw new Error("Can only split pairs")
+  if (user.credits < hand.bet) throw new Error("Insufficient funds for split")
+
+  await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: hand.bet } } })
+
+  const isAces = hand.cards[0].rank === 'A'
+  const c1 = hand.cards[0]
+  const c2 = hand.cards[1]
+
+  let shoeData: Card[] = JSON.parse(table.shoe || '[]')
+  const draw1 = drawCards(shoeData, 1)
+  const draw2 = drawCards(draw1.newShoe, 1)
+  shoeData = draw2.newShoe
+
+  hand.cards = [c1, draw1.drawn[0]]
+  
+  const newHand: Hand = {
+    id: `hand-${Date.now()}`,
+    cards: [c2, draw2.drawn[0]],
+    bet: hand.bet,
+    status: 'PLAYING',
+    payout: 0,
+    doubleDown: false
   }
+
+  if (isAces) {
+    // Split aces get exactly 1 card
+    hand.status = 'STAND'
+    newHand.status = 'STAND'
+  }
+
+  pState.hands.splice(handIdx + 1, 0, newHand)
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: { playerStates: JSON.stringify(playerStates), shoe: JSON.stringify(shoeData) }
+  })
+  
+  await checkAutoResolve(tableId)
+}
+
+export async function surrender(tableId: string, handId: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  if (!userId) throw new Error("Unauthorized")
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'PLAYING') throw new Error("Not playing")
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  const pState = playerStates[userId]
+  if (!pState || pState.status !== 'PLAYING') throw new Error("Cannot surrender")
+
+  const hand = pState.hands.find(h => h.id === handId)
+  if (!hand || hand.status !== 'PLAYING' || hand.cards.length !== 2 || pState.hands.length > 1) {
+    throw new Error("Cannot surrender now")
+  }
+
+  hand.status = 'SURRENDER'
+  
+  const returnAmt = Math.floor(hand.bet / 2)
+  await prisma.user.update({ where: { id: userId }, data: { credits: { increment: returnAmt } } })
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: { playerStates: JSON.stringify(playerStates) }
+  })
+  
+  await checkAutoResolve(tableId)
+}
+
+export async function checkAutoResolve(tableId: string) {
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'PLAYING') return
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  
+  let allDone = true
+  for (const p of Object.values(playerStates)) {
+    if (p.status === 'PLAYING') {
+      if (p.hands.some(h => h.status === 'PLAYING')) {
+        allDone = false
+        break
+      }
+    }
+  }
+
+  if (allDone) {
+    await resolveRound(tableId)
+  }
+}
+
+async function resolveRound(tableId: string) {
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table) return
+
+  const dHand: Card[] = JSON.parse(table.dealerHand || '[]')
+  dHand[1].hidden = false
+  
+  let dScore = calculateScore(dHand)
+  let shoeData: Card[] = JSON.parse(table.shoe || '[]')
+
+  // Play Dealer hand if needed
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  let someoneNeedsDealerToPlay = false
+  for (const p of Object.values(playerStates)) {
+    if (p.status !== 'SKIPPED' && p.hands.some(h => h.status !== 'BUST' && h.status !== 'SURRENDER' && h.status !== 'BLACKJACK')) {
+      someoneNeedsDealerToPlay = true
+    }
+  }
+
+  const chatHistory = JSON.parse(table.chatHistory || '[]')
+
+  if (someoneNeedsDealerToPlay && dScore !== 21) {
+    while (dScore < 17 || (dScore === 17 && dHand.some(c => c.rank === 'A'))) {
+      const res = drawCards(shoeData, 1)
+      dHand.push(res.drawn[0])
+      shoeData = res.newShoe
+      dScore = calculateScore(dHand)
+    }
+    chatHistory.push(`[${new Date().toLocaleTimeString()}] Dealer draws to ${dScore}.`)
+  }
+
+  for (const uid in playerStates) {
+    const p = playerStates[uid]
+    if (p.status === 'SKIPPED') continue
+
+    let totalPayout = 0
+
+    // Evaluate BustIt side bet
+    if (p.sideBets.bustIt > 0) {
+      const bustItMult = evaluateBustIt(dHand)
+      if (bustItMult > 0) {
+        const bustPayout = p.sideBets.bustIt * bustItMult + p.sideBets.bustIt
+        totalPayout += bustPayout
+        chatHistory.push(`[${new Date().toLocaleTimeString()}] ${p.username} won $${bustPayout} on Bust It!`)
+      }
+    }
+
+    for (const h of p.hands) {
+      if (h.status === 'SURRENDER') continue // Already got half back
+      if (h.status === 'BUST') {
+        h.payout = 0
+        continue
+      }
+      
+      if (h.status === 'BLACKJACK') {
+        if (dScore === 21 && dHand.length === 2) {
+          h.payout = h.bet // Push
+        } else {
+          h.payout = h.bet + (h.bet * 1.5) // 3:2
+        }
+      } else {
+        const pScore = calculateScore(h.cards)
+        if (dScore > 21 || pScore > dScore) {
+          h.payout = h.bet * 2
+        } else if (pScore === dScore) {
+          h.payout = h.bet
+        } else {
+          h.payout = 0
+        }
+      }
+      totalPayout += h.payout
+    }
+
+    if (totalPayout > 0) {
+      await prisma.user.update({ where: { id: uid }, data: { credits: { increment: totalPayout } } })
+      chatHistory.push(`[System] ${p.username} won $${totalPayout}!`)
+    }
+    p.status = 'RESOLVED'
+  }
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: {
+      status: 'RESOLVED',
+      dealerHand: JSON.stringify(dHand),
+      shoe: JSON.stringify(shoeData),
+      playerStates: JSON.stringify(playerStates),
+      chatHistory: JSON.stringify(chatHistory.slice(-50))
+    }
+  })
+}
+
+export async function nextRound(tableId: string) {
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'RESOLVED') return
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  for (const p of Object.values(playerStates)) {
+    p.status = 'SITTING'
+    p.hands = []
+    p.insuranceBet = 0
+    p.sideBets = { twentyOnePlusThree: 0, perfectPairs: 0, luckyLadies: 0, bustIt: 0 }
+  }
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: {
+      status: 'BETTING',
+      dealerHand: '[]',
+      playerStates: JSON.stringify(playerStates),
+      timerEndsAt: null
+    }
+  })
+}
+
+export async function chatWithDealer(tableId: string, message: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+  const user = await prisma.user.findUnique({ where: { id: userId! } })
+  
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || !user) return
+
+  const chatHistory = JSON.parse(table.chatHistory || '[]')
+  chatHistory.push(`[${new Date().toLocaleTimeString()}] ${user.username}: ${message}`)
+
+  await prisma.blackjackTable.update({
+    where: { id: tableId },
+    data: { chatHistory: JSON.stringify(chatHistory.slice(-50)) }
+  })
 }

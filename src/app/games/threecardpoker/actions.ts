@@ -36,11 +36,11 @@ export async function placeAnte(tableId: string, anteAmount: number, pairPlusAmo
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
   const totalBet = anteAmount + pairPlusAmount
-  if (!user || user.chipBalance < totalBet) throw new Error("Insufficient chips")
+  if (!user || user.credits < totalBet) throw new Error("Insufficient credits")
 
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: totalBet } }
+    data: { credits: { decrement: totalBet } }
   })
 
   const playerHands: Record<string, PlayerState> = JSON.parse(table.playerHands)
@@ -111,12 +111,12 @@ export async function placePlayBet(tableId: string) {
   if (!pState || pState.status !== 'WAITING') throw new Error("Cannot play")
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user || user.chipBalance < pState.betAnte) throw new Error("Insufficient chips for Play bet")
+  if (!user || user.credits < pState.betAnte) throw new Error("Insufficient credits for Play bet")
 
   // Deduct play bet
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: pState.betAnte } }
+    data: { credits: { decrement: pState.betAnte } }
   })
 
   pState.betPlay = pState.betAnte
@@ -228,7 +228,7 @@ export async function resolveRound(tableId: string) {
     if (payout > 0) {
       await prisma.user.update({
         where: { id: uid },
-        data: { chipBalance: { increment: payout } }
+        data: { credits: { increment: payout } }
       })
       const u = await prisma.user.findUnique({ where: { id: uid } })
       chatHistory.push(`[${new Date().toLocaleTimeString()}] ${u?.username} won $${payout}!`)

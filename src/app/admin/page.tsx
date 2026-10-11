@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getAllUsers, updateUserBalance, toggleUserBan, getAuditLogs, getTransactions, toggleGameEnabled, getAdminConfig, createUser, deleteUser, getHouseStats, updateHouseBank } from './actions'
+import { getAllUsers, updateUserBalance, toggleUserBan, getAuditLogs, getTransactions, toggleGameEnabled, getAdminConfig, createUser, deleteUser, getHouseStats, updateHouseBank, updateGameOdds, updateSportsApiKey, getPendingSportsBets, resolveSportsBet } from './actions'
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'USERS' | 'AUDIT' | 'FINANCIALS' | 'CONFIG'>('USERS')
+  const [activeTab, setActiveTab] = useState<'USERS' | 'AUDIT' | 'FINANCIALS' | 'CONFIG' | 'SPORTSBOOK'>('USERS')
   
   // Data States
   const [users, setUsers] = useState<any[]>([])
@@ -12,6 +12,13 @@ export default function AdminDashboard() {
   const [txs, setTxs] = useState<any[]>([])
   const [config, setConfig] = useState<any>(null)
   const [houseStats, setHouseStats] = useState<any>(null)
+  const [sportsBets, setSportsBets] = useState<any[]>([])
+  
+  // Game Odds Edit State
+  const [oddsEdits, setOddsEdits] = useState<Record<string, { winRate?: number, freeSpinsRate?: number }>>({})
+  
+  // Sportsbook API Key State
+  const [apiKeyInput, setApiKeyInput] = useState('')
 
   // Edit State
   const [houseBankAmount, setHouseBankAmount] = useState<number>(0)
@@ -36,18 +43,21 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     try {
-      const [u, l, t, c, h] = await Promise.all([
+      const [u, l, t, c, h, sb] = await Promise.all([
         getAllUsers(),
         getAuditLogs(),
         getTransactions(),
         getAdminConfig(),
-        getHouseStats()
+        getHouseStats(),
+        getPendingSportsBets()
       ])
       setUsers(u)
       setLogs(l)
       setTxs(t)
       setConfig(c)
       setHouseStats(h)
+      setSportsBets(sb)
+      setApiKeyInput(c.sportsApiKey || '')
     } catch (e) {
       console.error(e)
     }
@@ -61,7 +71,7 @@ export default function AdminDashboard() {
   }
 
   const handleSaveBalance = async (userId: string) => {
-    await updateUserBalance(userId, editChips, editBank)
+    await updateUserBalance(userId, editChips)
     setEditingUserId(null)
     loadData()
   }
@@ -98,14 +108,15 @@ export default function AdminDashboard() {
     { id: 'crash', name: 'Crash' },
     { id: 'keno', name: 'Keno' },
     { id: 'craps', name: 'Craps' },
-    { id: 'holdem', name: 'Texas Holdem' }
+    { id: 'holdem', name: 'Texas Holdem' },
+    { id: 'sportsbook', name: 'Sportsbook' }
   ]
 
   return (
     <div style={{ display: 'flex', gap: '40px', height: '100%' }}>
       {/* Sidebar Tabs */}
       <div style={{ width: '250px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {['USERS', 'AUDIT', 'HOUSE BANK', 'CONFIG'].map(tab => (
+        {['USERS', 'AUDIT', 'HOUSE BANK', 'CONFIG', 'SPORTSBOOK'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab as any)}
@@ -387,10 +398,124 @@ export default function AdminDashboard() {
                         {isEnabled ? 'DISABLE' : 'ENABLE'}
                       </button>
                     </div>
+
+                    <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Win Multiplier:</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
+                          {(oddsEdits[game.id]?.winRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.winRate ?? 1.0)).toFixed(1)}x
+                        </div>
+                      </div>
+                      <input 
+                        type="range" step="0.1" min="0.1" max="3.0"
+                        value={oddsEdits[game.id]?.winRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.winRate ?? 1.0)} 
+                        onChange={e => setOddsEdits(prev => ({ ...prev, [game.id]: { ...prev[game.id], winRate: parseFloat(e.target.value) } }))}
+                        onMouseUp={() => updateGameOdds(game.id, oddsEdits[game.id]?.winRate ?? 1.0, oddsEdits[game.id]?.freeSpinsRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.freeSpinsRate ?? 1.0))}
+                        style={{ width: '100%', accentColor: '#ffcc00', cursor: 'pointer' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Free Spins Multiplier:</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
+                          {(oddsEdits[game.id]?.freeSpinsRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.freeSpinsRate ?? 1.0)).toFixed(1)}x
+                        </div>
+                      </div>
+                      <input 
+                        type="range" step="0.1" min="0.1" max="3.0"
+                        value={oddsEdits[game.id]?.freeSpinsRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.freeSpinsRate ?? 1.0)} 
+                        onChange={e => setOddsEdits(prev => ({ ...prev, [game.id]: { ...prev[game.id], freeSpinsRate: parseFloat(e.target.value) } }))}
+                        onMouseUp={() => updateGameOdds(game.id, oddsEdits[game.id]?.winRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.winRate ?? 1.0), oddsEdits[game.id]?.freeSpinsRate ?? 1.0)}
+                        style={{ width: '100%', accentColor: '#00cc66', cursor: 'pointer' }}
+                      />
+                    </div>
                   </div>
                 )
               })}
             </div>
+          </div>
+        )}
+
+        {/* SPORTSBOOK TAB */}
+        {activeTab === 'SPORTSBOOK' && (
+          <div>
+            <h2 style={{ color: '#ffcc00', marginTop: 0 }}>Sportsbook Management</h2>
+            
+            <div className="glass-panel" style={{ padding: '20px', marginBottom: '30px', border: '1px solid #ffcc00' }}>
+              <h3 style={{ marginTop: 0, color: '#ffcc00' }}>Live Odds API Configuration</h3>
+              <p style={{ opacity: 0.8, fontSize: '0.9rem' }}>Enter your API key from <a href="https://the-odds-api.com" target="_blank" style={{color:'#00ffff'}}>the-odds-api.com</a> to switch from mocked data to real live odds.</p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input 
+                  type="password" 
+                  value={apiKeyInput} 
+                  onChange={e => setApiKeyInput(e.target.value)}
+                  placeholder="Paste API Key here..."
+                  style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', background: 'rgba(0,0,0,0.5)', color: '#fff' }}
+                />
+                <button 
+                  onClick={async () => { await updateSportsApiKey(apiKeyInput); alert('API Key Saved! The sportsbook is now live.'); loadData(); }} 
+                  className="btn-primary"
+                >
+                  Save API Key
+                </button>
+              </div>
+            </div>
+
+            <h3 style={{ color: '#fff', opacity: 0.8, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>Pending Bets Dashboard</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.2)', textAlign: 'left' }}>
+                  <th style={{ padding: '10px' }}>Time Placed</th>
+                  <th style={{ padding: '10px' }}>User</th>
+                  <th style={{ padding: '10px' }}>Sport</th>
+                  <th style={{ padding: '10px' }}>Match & Pick</th>
+                  <th style={{ padding: '10px' }}>Bet / Odds</th>
+                  <th style={{ padding: '10px' }}>To Win</th>
+                  <th style={{ padding: '10px' }}>Resolve</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sportsBets.map(bet => {
+                  const toWin = Math.floor(bet.amount * bet.odds)
+                  return (
+                    <tr key={bet.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '10px', opacity: 0.7 }}>{new Date(bet.createdAt).toLocaleString()}</td>
+                      <td style={{ padding: '10px' }}>User ID: {bet.userId.substring(0,6)}...</td>
+                      <td style={{ padding: '10px', textTransform: 'capitalize' }}>{bet.sportKey}</td>
+                      <td style={{ padding: '10px' }}>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{bet.eventId}</div>
+                        <div style={{ fontWeight: 'bold' }}>{bet.team}</div>
+                      </td>
+                      <td style={{ padding: '10px' }}>
+                        <div>${bet.amount}</div>
+                        <div style={{ color: '#aaa', fontSize: '0.8rem' }}>{bet.odds}x</div>
+                      </td>
+                      <td style={{ padding: '10px', color: '#00cc66', fontWeight: 'bold' }}>
+                        ${toWin}
+                      </td>
+                      <td style={{ padding: '10px', display: 'flex', gap: '10px' }}>
+                        <button 
+                          onClick={async () => { await resolveSportsBet(bet.id, true); loadData(); }}
+                          className="btn-primary" style={{ padding: '5px 10px', fontSize: '0.8rem', background: '#00cc66' }}
+                        >
+                          Mark Won
+                        </button>
+                        <button 
+                          onClick={async () => { await resolveSportsBet(bet.id, false); loadData(); }}
+                          className="btn-secondary" style={{ padding: '5px 10px', fontSize: '0.8rem', color: '#ff3366', borderColor: '#ff3366' }}
+                        >
+                          Mark Lost
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {sportsBets.length === 0 && <div style={{ padding: '20px', opacity: 0.5 }}>No pending sports bets.</div>}
           </div>
         )}
 

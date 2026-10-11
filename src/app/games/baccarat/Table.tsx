@@ -6,7 +6,7 @@ import { BaccaratBet, BaccaratBetType, Card, calculateHandScore } from './utils'
 import { useState, useEffect } from 'react'
 
 export default function BaccaratTableUI({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [table, setTable] = useState<any>(null)
   const [selectedChip, setSelectedChip] = useState<number>(10)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -39,7 +39,7 @@ export default function BaccaratTableUI({ tableId, onLeave }: { tableId: string,
     setIsProcessing(true)
     try {
       await placeBet(tableId, selectedChip, type)
-      updateBalances(user.chipBalance - selectedChip, user.bankBalance)
+      updateCredits(user.credits - selectedChip)
       await loadTable()
     } catch (e: any) {
       alert(e.message)
@@ -61,7 +61,7 @@ export default function BaccaratTableUI({ tableId, onLeave }: { tableId: string,
         const { getUser } = await import('@/app/actions')
         const freshUser = await getUser()
         if (freshUser) {
-          updateBalances(freshUser.chipBalance, freshUser.bankBalance)
+          updateCredits(freshUser.credits)
         }
       }, 5000)
     } catch (e: any) {

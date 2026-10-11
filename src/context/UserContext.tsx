@@ -6,8 +6,7 @@ import { logout as logoutAction } from '@/app/actions'
 type User = {
   id: string;
   username: string;
-  chipBalance: number;
-  bankBalance: number;
+  credits: number;
   role: string;
 }
 
@@ -15,7 +14,7 @@ type UserContextType = {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   logout: () => Promise<void>;
-  updateBalances: (chipBalance: number, bankBalance: number) => void;
+  updateCredits: (credits: number) => void;
   isLoading: boolean;
 }
 
@@ -32,12 +31,12 @@ export function UserProvider({ children, initialUser }: { children: React.ReactN
     setIsLoading(false)
   }
   
-  const updateBalances = (chipBalance: number, bankBalance: number) => {
-    setUser(prev => prev ? { ...prev, chipBalance, bankBalance } : null)
+  const updateCredits = (credits: number) => {
+    setUser(prev => prev ? { ...prev, credits } : null)
   }
 
   return (
-    <UserContext.Provider value={{ user, setUser, logout, updateBalances, isLoading }}>
+    <UserContext.Provider value={{ user, setUser, logout, updateCredits, isLoading }}>
       {children}
     </UserContext.Provider>
   )

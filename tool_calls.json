@@ -1,0 +1,940 @@
+[
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/components/Navbar.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 52,
+        "EndLine": 52,
+        "TargetContent": "                <span>💰 Chips:</span> {user.chipBalance.toLocaleString()}",
+        "ReplacementContent": "                <span>💰 Chips:</span> {user.credits.toLocaleString()}",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/admin/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 16,
+        "EndLine": 16,
+        "TargetContent": "export async function updateUserBalance(userId: string, chipBalance: number, bankBalance: number) {",
+        "ReplacementContent": "export async function updateUserBalance(userId: string, credits: number, credits: number) {",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 20,
+        "EndLine": 20,
+        "TargetContent": "    data: { chipBalance, bankBalance }",
+        "ReplacementContent": "    data: { credits }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 103,
+        "EndLine": 103,
+        "TargetContent": "export async function createUser(data: { username: string, password?: string, requiresPasswordReset: boolean, chipBalance: number, bankBalance: number, role: string }) {",
+        "ReplacementContent": "export async function createUser(data: { username: string, password?: string, requiresPasswordReset: boolean, credits: number, credits: number, role: string }) {",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 121,
+        "EndLine": 121,
+        "TargetContent": "      chipBalance: data.chipBalance,",
+        "ReplacementContent": "      credits: data.credits,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 122,
+        "EndLine": 122,
+        "TargetContent": "      bankBalance: data.bankBalance,",
+        "ReplacementContent": "      credits: data.credits,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 155,
+        "EndLine": 155,
+        "TargetContent": "    _sum: { chipBalance: true }",
+        "ReplacementContent": "    _sum: { credits: true }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 173,
+        "EndLine": 173,
+        "TargetContent": "    playerLiability: liability._sum.chipBalance || 0,",
+        "ReplacementContent": "    playerLiability: liability._sum.credits || 0,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 214,
+        "EndLine": 214,
+        "TargetContent": "      prisma.user.update({ where: { id: bet.userId }, data: { chipBalance: { increment: payout } } })",
+        "ReplacementContent": "      prisma.user.update({ where: { id: bet.userId }, data: { credits: { increment: payout } } })",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/admin/page.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 33,
+        "EndLine": 33,
+        "TargetContent": "    chipBalance: 0,",
+        "ReplacementContent": "    credits: 0,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 34,
+        "EndLine": 34,
+        "TargetContent": "    bankBalance: 1000",
+        "ReplacementContent": "    credits: 1000",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 107,
+        "EndLine": 107,
+        "TargetContent": "    setNewUserData({ username: '', password: '', requiresPasswordReset: false, role: 'PLAYER', chipBalance: 0, bankBalance: 1000 })",
+        "ReplacementContent": "    setNewUserData({ username: '', password: '', requiresPasswordReset: false, role: 'PLAYER', credits: 0 })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 196,
+        "EndLine": 196,
+        "TargetContent": "                    <input type=\"number\" value={newUserData.chipBalance} onChange={e => setNewUserData({...newUserData, chipBalance: Number(e.target.value)})} style={{ padding: '8px', borderRadius: '4px', border: 'none', background: '#222', color: '#fff', width: '80px' }} />",
+        "ReplacementContent": "                    <input type=\"number\" value={newUserData.credits} onChange={e => setNewUserData({...newUserData, credits: Number(e.target.value)})} style={{ padding: '8px', borderRadius: '4px', border: 'none', background: '#222', color: '#fff', width: '80px' }} />",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 200,
+        "EndLine": 200,
+        "TargetContent": "                    <input type=\"number\" value={newUserData.bankBalance} onChange={e => setNewUserData({...newUserData, bankBalance: Number(e.target.value)})} style={{ padding: '8px', borderRadius: '4px', border: 'none', background: '#222', color: '#fff', width: '80px' }} />",
+        "ReplacementContent": "                    <input type=\"number\" value={newUserData.credits} onChange={e => setNewUserData({...newUserData, credits: Number(e.target.value)})} style={{ padding: '8px', borderRadius: '4px', border: 'none', background: '#222', color: '#fff', width: '80px' }} />",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 232,
+        "EndLine": 232,
+        "TargetContent": "                        `$${u.chipBalance}`",
+        "ReplacementContent": "                        `$${u.credits}`",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 239,
+        "EndLine": 239,
+        "TargetContent": "                        `$${u.bankBalance}`",
+        "ReplacementContent": "                        `$${u.credits}`",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 251,
+        "EndLine": 251,
+        "TargetContent": "                            onClick={() => { setEditingUserId(u.id); setEditChips(u.chipBalance); setEditBank(u.bankBalance); }} ",
+        "ReplacementContent": "                            onClick={() => { setEditingUserId(u.id); setEditChips(u.credits); setEditBank(u.credits); }} ",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/piggies/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 83,
+        "EndLine": 83,
+        "TargetContent": "  if (!state.isFreeSpinMode && user.chipBalance < betAmount) {",
+        "ReplacementContent": "  if (!state.isFreeSpinMode && user.credits < betAmount) {",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 87,
+        "EndLine": 87,
+        "TargetContent": "    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: betAmount } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: betAmount } } })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 263,
+        "EndLine": 263,
+        "TargetContent": "      chipBalance: { increment: Math.floor(totalWin) },",
+        "ReplacementContent": "      credits: { increment: Math.floor(totalWin) },",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 308,
+        "EndLine": 308,
+        "TargetContent": "    newBalance: updatedUser.chipBalance",
+        "ReplacementContent": "    newBalance: updatedUser.credits",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/piggies/page.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 19,
+        "EndLine": 19,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 91,
+        "EndLine": 91,
+        "TargetContent": "    if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return",
+        "ReplacementContent": "    if (!gameState?.isFreeSpinMode && user.credits < betAmount) return",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 142,
+        "EndLine": 142,
+        "TargetContent": "    updateBalances(result.newBalance, user!.bankBalance)",
+        "ReplacementContent": "    updateCredits(result.newBalance)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 402,
+        "EndLine": 402,
+        "TargetContent": "          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>",
+        "ReplacementContent": "          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 449,
+        "EndLine": 449,
+        "TargetContent": "            cursor: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 'not-allowed' : 'pointer',",
+        "ReplacementContent": "            cursor: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 'not-allowed' : 'pointer',",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 450,
+        "EndLine": 450,
+        "TargetContent": "            opacity: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 0.5 : 1,",
+        "ReplacementContent": "            opacity: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 0.5 : 1,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 457,
+        "EndLine": 457,
+        "TargetContent": "          disabled={isSpinning || (!isFreeSpins && user.chipBalance < betAmount)}",
+        "ReplacementContent": "          disabled={isSpinning || (!isFreeSpins && user.credits < betAmount)}",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/craps/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 35,
+        "EndLine": 35,
+        "TargetContent": "  if (!user || user.chipBalance < amount) throw new Error(\"Insufficient chips\")",
+        "ReplacementContent": "  if (!user || user.credits < amount) throw new Error(\"Insufficient chips\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 43,
+        "EndLine": 43,
+        "TargetContent": "    data: { chipBalance: { decrement: amount } }",
+        "ReplacementContent": "    data: { credits: { decrement: amount } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 224,
+        "EndLine": 224,
+        "TargetContent": "        data: { chipBalance: { increment: amount } }",
+        "ReplacementContent": "        data: { credits: { increment: amount } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/craps/Table.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 9,
+        "EndLine": 9,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 44,
+        "EndLine": 44,
+        "TargetContent": "    const oldBalance = user.chipBalance",
+        "ReplacementContent": "    const oldBalance = user.credits",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 48,
+        "EndLine": 48,
+        "TargetContent": "      updateBalances(oldBalance - selectedChip, user.bankBalance)",
+        "ReplacementContent": "      updateCredits(oldBalance - selectedChip)",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/sportsbook/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 17,
+        "EndLine": 17,
+        "TargetContent": "  if (user.chipBalance < amount) {",
+        "ReplacementContent": "  if (user.credits < amount) {",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 25,
+        "EndLine": 25,
+        "TargetContent": "      data: { chipBalance: { decrement: amount } }",
+        "ReplacementContent": "      data: { credits: { decrement: amount } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/sportsbook/SportsbookClient.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 311,
+        "EndLine": 311,
+        "TargetContent": "                  disabled={placing || betSlip.amount <= 0 || (user?.chipBalance || 0) < betSlip.amount}",
+        "ReplacementContent": "                  disabled={placing || betSlip.amount <= 0 || (user?.credits || 0) < betSlip.amount}",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/baccarat/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 38,
+        "EndLine": 38,
+        "TargetContent": "  if (!user || user.chipBalance < amount) throw new Error(\"Insufficient chips\")",
+        "ReplacementContent": "  if (!user || user.credits < amount) throw new Error(\"Insufficient chips\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 43,
+        "EndLine": 43,
+        "TargetContent": "    data: { chipBalance: { decrement: amount } }",
+        "ReplacementContent": "    data: { credits: { decrement: amount } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 91,
+        "EndLine": 91,
+        "TargetContent": "        data: { chipBalance: { increment: Math.floor(payout) } }",
+        "ReplacementContent": "        data: { credits: { increment: Math.floor(payout) } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 100,
+        "EndLine": 100,
+        "TargetContent": "            data: { chipBalance: { increment: bet.amount } }",
+        "ReplacementContent": "            data: { credits: { increment: bet.amount } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/baccarat/Table.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 9,
+        "EndLine": 9,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 42,
+        "EndLine": 42,
+        "TargetContent": "      updateBalances(user.chipBalance - selectedChip, user.bankBalance)",
+        "ReplacementContent": "      updateCredits(user.credits - selectedChip)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 64,
+        "EndLine": 64,
+        "TargetContent": "          updateBalances(freshUser.chipBalance, freshUser.bankBalance)",
+        "ReplacementContent": "          updateCredits(freshUser.credits)",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/roulette/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 35,
+        "EndLine": 35,
+        "TargetContent": "  if (!user || user.chipBalance < amount) throw new Error(\"Insufficient chips\")",
+        "ReplacementContent": "  if (!user || user.credits < amount) throw new Error(\"Insufficient chips\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 44,
+        "EndLine": 44,
+        "TargetContent": "    data: { chipBalance: { decrement: amount } }",
+        "ReplacementContent": "    data: { credits: { decrement: amount } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 169,
+        "EndLine": 169,
+        "TargetContent": "        data: { chipBalance: { increment: amount } }",
+        "ReplacementContent": "        data: { credits: { increment: amount } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/frankenstein/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 103,
+        "EndLine": 103,
+        "TargetContent": "  if (!state.isFreeSpinMode && user.chipBalance < betAmount) throw new Error(\"Insufficient chip balance\")",
+        "ReplacementContent": "  if (!state.isFreeSpinMode && user.credits < betAmount) throw new Error(\"Insufficient chip balance\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 105,
+        "EndLine": 105,
+        "TargetContent": "    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: betAmount } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: betAmount } } })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 322,
+        "EndLine": 322,
+        "TargetContent": "      chipBalance: { increment: Math.floor(totalWin) },",
+        "ReplacementContent": "      credits: { increment: Math.floor(totalWin) },",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 356,
+        "EndLine": 356,
+        "TargetContent": "    newBalance: updatedUser.chipBalance,",
+        "ReplacementContent": "    newBalance: updatedUser.credits,",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/frankenstein/page.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 19,
+        "EndLine": 19,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 184,
+        "EndLine": 184,
+        "TargetContent": "    if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return",
+        "ReplacementContent": "    if (!gameState?.isFreeSpinMode && user.credits < betAmount) return",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 214,
+        "EndLine": 214,
+        "TargetContent": "        updateBalances(result.newBalance, user.bankBalance)",
+        "ReplacementContent": "        updateCredits(result.newBalance)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 624,
+        "EndLine": 624,
+        "TargetContent": "          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>",
+        "ReplacementContent": "          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 671,
+        "EndLine": 671,
+        "TargetContent": "            cursor: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 'not-allowed' : 'pointer',",
+        "ReplacementContent": "            cursor: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 'not-allowed' : 'pointer',",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 672,
+        "EndLine": 672,
+        "TargetContent": "            opacity: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 0.5 : 1,",
+        "ReplacementContent": "            opacity: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 0.5 : 1,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 679,
+        "EndLine": 679,
+        "TargetContent": "          disabled={isSpinning || (!isFreeSpins && user.chipBalance < betAmount)}",
+        "ReplacementContent": "          disabled={isSpinning || (!isFreeSpins && user.credits < betAmount)}",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/buffalo/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 62,
+        "EndLine": 62,
+        "TargetContent": "  if (!state.isFreeSpinMode && user.chipBalance < betAmount) {",
+        "ReplacementContent": "  if (!state.isFreeSpinMode && user.credits < betAmount) {",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 66,
+        "EndLine": 66,
+        "TargetContent": "    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: betAmount } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: betAmount } } })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 240,
+        "EndLine": 240,
+        "TargetContent": "      chipBalance: { increment: Math.floor(totalWin) },",
+        "ReplacementContent": "      credits: { increment: Math.floor(totalWin) },",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 270,
+        "EndLine": 270,
+        "TargetContent": "    newBalance: updatedUser.chipBalance",
+        "ReplacementContent": "    newBalance: updatedUser.credits",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/buffalo/page.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 17,
+        "EndLine": 17,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 86,
+        "EndLine": 86,
+        "TargetContent": "    if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return",
+        "ReplacementContent": "    if (!gameState?.isFreeSpinMode && user.credits < betAmount) return",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 119,
+        "EndLine": 119,
+        "TargetContent": "    updateBalances(result.newBalance, user!.bankBalance)",
+        "ReplacementContent": "    updateCredits(result.newBalance)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 310,
+        "EndLine": 310,
+        "TargetContent": "          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>",
+        "ReplacementContent": "          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 352,
+        "EndLine": 352,
+        "TargetContent": "            cursor: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 'not-allowed' : 'pointer',",
+        "ReplacementContent": "            cursor: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 'not-allowed' : 'pointer',",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 353,
+        "EndLine": 353,
+        "TargetContent": "            opacity: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 0.5 : 1,",
+        "ReplacementContent": "            opacity: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 0.5 : 1,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 358,
+        "EndLine": 358,
+        "TargetContent": "          disabled={isSpinning || (!isFreeSpins && user.chipBalance < betAmount)}",
+        "ReplacementContent": "          disabled={isSpinning || (!isFreeSpins && user.credits < betAmount)}",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/blackjack/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 117,
+        "EndLine": 117,
+        "TargetContent": "  if (!user || user.chipBalance < amount) throw new Error(\"Insufficient funds\")",
+        "ReplacementContent": "  if (!user || user.credits < amount) throw new Error(\"Insufficient funds\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 126,
+        "EndLine": 126,
+        "TargetContent": "    data: { chipBalance: { decrement: amount } }",
+        "ReplacementContent": "    data: { credits: { decrement: amount } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 319,
+        "EndLine": 319,
+        "TargetContent": "        data: { chipBalance: { increment: payout } }",
+        "ReplacementContent": "        data: { credits: { increment: payout } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/blackjack/Table.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 11,
+        "EndLine": 11,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 157,
+        "EndLine": 157,
+        "TargetContent": "        <div style={{ color: '#ffcc00', fontSize: '1.2rem', fontWeight: 'bold' }}>Chips: ${user?.chipBalance.toLocaleString()}</div>",
+        "ReplacementContent": "        <div style={{ color: '#ffcc00', fontSize: '1.2rem', fontWeight: 'bold' }}>Chips: ${user?.credits.toLocaleString()}</div>",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 347,
+        "EndLine": 347,
+        "TargetContent": "            <button className=\"btn-primary\" style={{ marginLeft: '16px', padding: '16px 32px', fontSize: '1.2rem', boxShadow: '0 0 15px rgba(212,175,55,0.4)' }} onClick={() => handleAction(() => placeBet(tableId, betAmount).then(() => checkAutoDeal(tableId)))} disabled={isProcessing || user!.chipBalance < betAmount}>",
+        "ReplacementContent": "            <button className=\"btn-primary\" style={{ marginLeft: '16px', padding: '16px 32px', fontSize: '1.2rem', boxShadow: '0 0 15px rgba(212,175,55,0.4)' }} onClick={() => handleAction(() => placeBet(tableId, betAmount).then(() => checkAutoDeal(tableId)))} disabled={isProcessing || user!.credits < betAmount}>",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/holdem/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 53,
+        "EndLine": 53,
+        "TargetContent": "      chips: user.chipBalance,",
+        "ReplacementContent": "      chips: user.credits,",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 107,
+        "EndLine": 107,
+        "TargetContent": "      if (u) p.chips = u.chipBalance",
+        "ReplacementContent": "      if (u) p.chips = u.credits",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 137,
+        "EndLine": 137,
+        "TargetContent": "    await prisma.user.update({ where: { id: players[sbIndex].id }, data: { chipBalance: { decrement: BLIND_SMALL } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: players[sbIndex].id }, data: { credits: { decrement: BLIND_SMALL } } })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 143,
+        "EndLine": 143,
+        "TargetContent": "    await prisma.user.update({ where: { id: players[bbIndex].id }, data: { chipBalance: { decrement: BLIND_BIG } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: players[bbIndex].id }, data: { credits: { decrement: BLIND_BIG } } })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 286,
+        "EndLine": 286,
+        "TargetContent": "    await prisma.user.update({ where: { id: winner.id }, data: { chipBalance: { increment: pot } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: winner.id }, data: { credits: { increment: pot } } })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 327,
+        "EndLine": 327,
+        "TargetContent": "    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: callAmt } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: callAmt } } })",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 338,
+        "EndLine": 338,
+        "TargetContent": "    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: totalDeduct } } })",
+        "ReplacementContent": "    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: totalDeduct } } })",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/holdem/Table.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 10,
+        "EndLine": 10,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 69,
+        "EndLine": 69,
+        "TargetContent": "    const oldBalance = user.chipBalance",
+        "ReplacementContent": "    const oldBalance = user.credits",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 81,
+        "EndLine": 81,
+        "TargetContent": "        updateBalances(result.newBalance, user.bankBalance)",
+        "ReplacementContent": "        updateCredits(result.newBalance)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 215,
+        "EndLine": 215,
+        "TargetContent": "          <div style={{ fontSize: '2rem', color: '#fff', textShadow: '0 0 10px rgba(212,175,55,0.5)', fontWeight: 'bold' }}>${user?.chipBalance.toLocaleString()}</div>",
+        "ReplacementContent": "          <div style={{ fontSize: '2rem', color: '#fff', textShadow: '0 0 10px rgba(212,175,55,0.5)', fontWeight: 'bold' }}>${user?.credits.toLocaleString()}</div>",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/crash/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 39,
+        "EndLine": 39,
+        "TargetContent": "  if (!user || user.chipBalance < amount) throw new Error(\"Insufficient chips\")",
+        "ReplacementContent": "  if (!user || user.credits < amount) throw new Error(\"Insufficient chips\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 43,
+        "EndLine": 43,
+        "TargetContent": "    data: { chipBalance: { decrement: amount } }",
+        "ReplacementContent": "    data: { credits: { decrement: amount } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 122,
+        "EndLine": 122,
+        "TargetContent": "    data: { chipBalance: { increment: profit } }",
+        "ReplacementContent": "    data: { credits: { increment: profit } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/crash/Table.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 9,
+        "EndLine": 9,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 79,
+        "EndLine": 79,
+        "TargetContent": "      updateBalances(user.chipBalance - betAmount, user.bankBalance)",
+        "ReplacementContent": "      updateCredits(user.credits - betAmount)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 106,
+        "EndLine": 106,
+        "TargetContent": "        updateBalances(freshUser.chipBalance, freshUser.bankBalance)",
+        "ReplacementContent": "        updateCredits(freshUser.credits)",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/keno/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 38,
+        "EndLine": 38,
+        "TargetContent": "  if (!user || user.chipBalance < amount) throw new Error(\"Insufficient chips\")",
+        "ReplacementContent": "  if (!user || user.credits < amount) throw new Error(\"Insufficient chips\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 42,
+        "EndLine": 42,
+        "TargetContent": "    data: { chipBalance: { decrement: amount } }",
+        "ReplacementContent": "    data: { credits: { decrement: amount } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 83,
+        "EndLine": 83,
+        "TargetContent": "        data: { chipBalance: { increment: profit } }",
+        "ReplacementContent": "        data: { credits: { increment: profit } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/keno/Table.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 9,
+        "EndLine": 9,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 29,
+        "EndLine": 29,
+        "TargetContent": "        updateBalances(freshUser.chipBalance, freshUser.bankBalance)",
+        "ReplacementContent": "        updateCredits(freshUser.credits)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 51,
+        "EndLine": 51,
+        "TargetContent": "      updateBalances(user.chipBalance - finalBet, user.bankBalance)",
+        "ReplacementContent": "      updateCredits(user.credits - finalBet)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 300,
+        "EndLine": 300,
+        "TargetContent": "            <div style={{ color: '#FFD700', fontSize: '2.5rem', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>",
+        "ReplacementContent": "            <div style={{ color: '#FFD700', fontSize: '2.5rem', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/threecardpoker/actions.ts",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 39,
+        "EndLine": 39,
+        "TargetContent": "  if (!user || user.chipBalance < totalBet) throw new Error(\"Insufficient chips\")",
+        "ReplacementContent": "  if (!user || user.credits < totalBet) throw new Error(\"Insufficient chips\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 43,
+        "EndLine": 43,
+        "TargetContent": "    data: { chipBalance: { decrement: totalBet } }",
+        "ReplacementContent": "    data: { credits: { decrement: totalBet } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 114,
+        "EndLine": 114,
+        "TargetContent": "  if (!user || user.chipBalance < pState.betAnte) throw new Error(\"Insufficient chips for Play bet\")",
+        "ReplacementContent": "  if (!user || user.credits < pState.betAnte) throw new Error(\"Insufficient chips for Play bet\")",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 119,
+        "EndLine": 119,
+        "TargetContent": "    data: { chipBalance: { decrement: pState.betAnte } }",
+        "ReplacementContent": "    data: { credits: { decrement: pState.betAnte } }",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 231,
+        "EndLine": 231,
+        "TargetContent": "        data: { chipBalance: { increment: payout } }",
+        "ReplacementContent": "        data: { credits: { increment: payout } }",
+        "AllowMultiple": true
+      }
+    ]
+  },
+  {
+    "TargetFile": "/home/zking/.gemini/antigravity/scratch/casino-app/src/app/games/threecardpoker/Table.tsx",
+    "Instruction": "Replace chipBalance with credits and remove bankBalance",
+    "Description": "Refactoring balance fields to unified credits",
+    "ReplacementChunks": [
+      {
+        "StartLine": 9,
+        "EndLine": 9,
+        "TargetContent": "  const { user, updateBalances } = useUser()",
+        "ReplacementContent": "  const { user, updateCredits } = useUser()",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 34,
+        "EndLine": 34,
+        "TargetContent": "        updateBalances(freshUser.chipBalance, freshUser.bankBalance)",
+        "ReplacementContent": "        updateCredits(freshUser.credits)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 48,
+        "EndLine": 48,
+        "TargetContent": "      updateBalances(user.chipBalance - anteBet - pairPlusBet, user.bankBalance)",
+        "ReplacementContent": "      updateCredits(user.credits - anteBet - pairPlusBet)",
+        "AllowMultiple": true
+      },
+      {
+        "StartLine": 74,
+        "EndLine": 74,
+        "TargetContent": "      updateBalances(user!.chipBalance - myState.betAnte, user!.bankBalance)",
+        "ReplacementContent": "      updateCredits(user!.credits - myState.betAnte)",
+        "AllowMultiple": true
+      }
+    ]
+  }
+]

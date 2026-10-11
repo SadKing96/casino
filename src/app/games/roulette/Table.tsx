@@ -18,6 +18,45 @@ export default function RouletteTableUI({ tableId, onLeave }: { tableId: string,
   // Traditional wheel animation state
   const [wheelRotation, setWheelRotation] = useState(0)
 
+  const audioCtxRef = useRef<AudioContext | null>(null)
+
+  useEffect(() => {
+    let tickInterval: NodeJS.Timeout;
+    if (spinning) {
+      if (!audioCtxRef.current) {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) audioCtxRef.current = new AudioContext();
+      }
+      
+      const playTick = () => {
+        if (!audioCtxRef.current) return;
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') ctx.resume();
+        try {
+          const oscillator = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          oscillator.type = 'triangle';
+          oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
+
+          gainNode.gain.setValueAtTime(0.05, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+
+          oscillator.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          oscillator.start(ctx.currentTime);
+          oscillator.stop(ctx.currentTime + 0.05);
+        } catch (e) {}
+      };
+      
+      // Make tick interval slow down over time or just keep it constant for simplicity
+      tickInterval = setInterval(playTick, 80);
+    }
+    return () => clearInterval(tickInterval);
+  }, [spinning])
+
   // Standard wheel sequence for American Roulette
   const WHEEL_SEQUENCE = ['0', '28', '9', '26', '30', '11', '7', '20', '32', '17', '5', '22', '34', '15', '3', '24', '36', '13', '1', '00', '27', '10', '25', '29', '12', '8', '19', '31', '18', '6', '21', '33', '16', '4', '23', '35', '14', '2']
   const sliceAngle = 360 / 38

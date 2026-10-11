@@ -6,7 +6,7 @@ import { CrashBet, calculateMultiplier, calculateTimeMsForMultiplier } from './u
 import { useState, useEffect, useRef } from 'react'
 
 export default function CrashTableUI({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [table, setTable] = useState<any>(null)
   const [selectedChip, setSelectedChip] = useState<number>(10)
   const [betAmount, setBetAmount] = useState(0)
@@ -76,7 +76,7 @@ export default function CrashTableUI({ tableId, onLeave }: { tableId: string, on
     setIsProcessing(true)
     try {
       await placeBet(tableId, betAmount)
-      updateBalances(user.chipBalance - betAmount, user.bankBalance)
+      updateCredits(user.credits - betAmount)
       await loadTable()
     } catch (e: any) {
       alert(e.message)
@@ -103,7 +103,7 @@ export default function CrashTableUI({ tableId, onLeave }: { tableId: string, on
       const res = await cashOut(tableId)
       const freshUser = await (await import('@/app/actions')).getUser()
       if (freshUser) {
-        updateBalances(freshUser.chipBalance, freshUser.bankBalance)
+        updateCredits(freshUser.credits)
       }
     } catch (e: any) {
       alert(e.message)

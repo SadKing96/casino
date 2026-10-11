@@ -32,15 +32,15 @@ export async function placeBet(tableId: string, type: CrapsBetType, amount: numb
   if (!userId) throw new Error("Unauthorized")
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user || user.chipBalance < amount) throw new Error("Insufficient chips")
+  if (!user || user.credits < amount) throw new Error("Insufficient credits")
 
   const table = await prisma.crapsTable.findUnique({ where: { id: tableId } })
   if (!table) throw new Error("Table not found")
 
-  // Deduct chips immediately
+  // Deduct credits immediately
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: amount } }
+    data: { credits: { decrement: amount } }
   })
 
   const newBet: CrapsBet = {
@@ -221,7 +221,7 @@ export async function rollDice(tableId: string) {
     if (amount > 0) {
       await prisma.user.update({
         where: { id: uid },
-        data: { chipBalance: { increment: amount } }
+        data: { credits: { increment: amount } }
       })
     }
   }

@@ -32,7 +32,7 @@ export async function placeBet(tableId: string, type: RouletteBetType, amount: n
   if (!userId) throw new Error("Unauthorized")
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user || user.chipBalance < amount) throw new Error("Insufficient chips")
+  if (!user || user.credits < amount) throw new Error("Insufficient credits")
 
   const table = await prisma.rouletteTable.findUnique({ where: { id: tableId } })
   if (!table) throw new Error("Table not found")
@@ -41,7 +41,7 @@ export async function placeBet(tableId: string, type: RouletteBetType, amount: n
   // Deduct chips
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: amount } }
+    data: { credits: { decrement: amount } }
   })
 
   const newBet: RouletteBet = {
@@ -166,7 +166,7 @@ export async function spinWheel(tableId: string) {
     if (amount > 0) {
       await prisma.user.update({
         where: { id: uid },
-        data: { chipBalance: { increment: amount } }
+        data: { credits: { increment: amount } }
       })
     }
   }

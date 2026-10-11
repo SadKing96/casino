@@ -6,7 +6,7 @@ import { Card, PlayerState, evaluate3CardHand } from './utils'
 import { useState, useEffect } from 'react'
 
 export default function ThreeCardPokerTableUI({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [table, setTable] = useState<any>(null)
   const [selectedChip, setSelectedChip] = useState<number>(10)
   const [anteBet, setAnteBet] = useState(0)
@@ -31,7 +31,7 @@ export default function ThreeCardPokerTableUI({ tableId, onLeave }: { tableId: s
       const { getUser } = await import('@/app/actions')
       const freshUser = await getUser()
       if (freshUser) {
-        updateBalances(freshUser.chipBalance, freshUser.bankBalance)
+        updateCredits(freshUser.credits)
       }
     }
   }
@@ -45,7 +45,7 @@ export default function ThreeCardPokerTableUI({ tableId, onLeave }: { tableId: s
     setIsProcessing(true)
     try {
       await placeAnte(tableId, anteBet, pairPlusBet)
-      updateBalances(user.chipBalance - anteBet - pairPlusBet, user.bankBalance)
+      updateCredits(user.credits - anteBet - pairPlusBet)
       await loadTable()
     } catch (e: any) {
       alert(e.message)
@@ -71,7 +71,7 @@ export default function ThreeCardPokerTableUI({ tableId, onLeave }: { tableId: s
     try {
       await placePlayBet(tableId)
       const myState = JSON.parse(table.playerHands)[user?.id || '']
-      updateBalances(user!.chipBalance - myState.betAnte, user!.bankBalance)
+      updateCredits(user!.credits - myState.betAnte)
       await loadTable()
     } catch (e: any) {
       alert(e.message)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useUser } from '@/context/UserContext'
-import { getFrankensteinState, spinFrankenstein, getGlobalState } from './actions'
+import { getFrankensteinState, spinFrankenstein, getGlobalState, resetFrankensteinGame } from './actions'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -16,40 +16,119 @@ const JACKPOT_NAMES = ['MINI', 'MINOR', 'MAXI', 'SUPER', 'MAJOR', 'GRAND']
 const JACKPOT_MULT: Record<string, number> = { MINI: 10, MINOR: 25, MAXI: 50, SUPER: 150, MAJOR: 300, GRAND: 2000 }
 
 export default function FrankensteinSlot() {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [grid, setGrid] = useState<string[][]>(INITIAL_GRID)
   const [isSpinning, setIsSpinning] = useState(false)
+  const [winAmount, setWinAmount] = useState(0)
+  const [lineWins, setLineWins] = useState<number[]>([])
   const [betAmount, setBetAmount] = useState(10)
+  const [spinningReels, setSpinningReels] = useState<boolean[]>([false, false, false, false, false])
+  const [showOverlay, setShowOverlay] = useState(false)
   
   const [gameState, setGameState] = useState<any>(null)
+  const [persistentMultipliers, setPersistentMultipliers] = useState<number[]>(Array(15).fill(1))
   const [lastWin, setLastWin] = useState<number | null>(null)
   const [winningLines, setWinningLines] = useState<number[]>([])
   const [jackpotWon, setJackpotWon] = useState<string | null>(null)
+  const [collectedPrizes, setCollectedPrizes] = useState<any[]>([])
   
   const [lightningSpreads, setLightningSpreads] = useState<{r: number, c: number}[]>([])
   const [fireSpreads, setFireSpreads] = useState<{r: number, c: number}[]>([])
 
   const [globalJackpots, setGlobalJackpots] = useState<any>(null)
   const [activePlayers, setActivePlayers] = useState<string[]>([])
+  
+  const [zoomScale, setZoomScale] = useState(1)
+
+  useEffect(() => {
+    const handleResize = () => {
+      // Scale down if height is small
+      const targetHeight = 1000 
+      if (window.innerHeight < targetHeight) {
+        setZoomScale(window.innerHeight / targetHeight)
+      } else {
+        setZoomScale(1)
+      }
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Audio state
   const [isMuted, setIsMuted] = useState(false)
+  const [volume, setVolume] = useState(0.3)
   const isMutedRef = useRef(false)
+  const volumeRef = useRef(0.3)
   const bgMusicRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     isMutedRef.current = isMuted
+    volumeRef.current = volume
     if (bgMusicRef.current) {
       bgMusicRef.current.muted = isMuted
+      bgMusicRef.current.volume = volume
     }
-  }, [isMuted])
+  }, [isMuted, volume])
+
+  const audioCtxRef = useRef<AudioContext | null>(null)
+
+  useEffect(() => {
+    let tickInterval: NodeJS.Timeout;
+    const isAnySpinning = spinningReels.some(r => r);
+    
+    if (isAnySpinning && !isMuted) {
+      if (!audioCtxRef.current) {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) audioCtxRef.current = new AudioContext();
+      }
+      
+      const playTick = () => {
+        if (!audioCtxRef.current) return;
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') ctx.resume();
+        try {
+          const oscillator = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          // Simple Reverb using a short delay network
+          const delay = ctx.createDelay();
+          delay.delayTime.value = 0.04; // 40ms slapback
+          const feedback = ctx.createGain();
+          feedback.gain.value = 0.35; // 35% feedback tail
+          
+          delay.connect(feedback);
+          feedback.connect(delay);
+          delay.connect(ctx.destination);
+
+          // Sine wave for a soft, clean 'plop', low pitched
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(150, ctx.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.05);
+
+          gainNode.gain.setValueAtTime(volumeRef.current * 0.8, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+
+          oscillator.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          gainNode.connect(delay); // Send to reverb
+
+          oscillator.start(ctx.currentTime);
+          oscillator.stop(ctx.currentTime + 0.05);
+        } catch (e) {}
+      };
+      
+      tickInterval = setInterval(playTick, 90);
+    }
+    return () => clearInterval(tickInterval);
+  }, [spinningReels, isMuted])
 
   useEffect(() => {
     // Initialize background music
     if (typeof window !== 'undefined') {
-      bgMusicRef.current = new Audio('/audio/bg_music.mp3')
+      bgMusicRef.current = new Audio('/audio/frankenstein_theme.mp3')
       bgMusicRef.current.loop = true
-      bgMusicRef.current.volume = 0.3
+      bgMusicRef.current.volume = volumeRef.current
     }
     
     return () => {
@@ -77,7 +156,12 @@ export default function FrankensteinSlot() {
     const interval = setInterval(fetchGlobal, 3000)
 
     getFrankensteinState()
-      .then(state => { if (mounted) setGameState(state) })
+      .then(res => { 
+        if (mounted && res) {
+          setGameState(res.state)
+          if (res.persistentMultipliers) setPersistentMultipliers(res.persistentMultipliers)
+        } 
+      })
       .catch(err => {
         console.error('Failed to load Frankenstein state:', err)
         if (mounted) setGameState({ error: true })
@@ -89,9 +173,15 @@ export default function FrankensteinSlot() {
     }
   }, [user])
 
-  const handleSpin = async () => {
+  const handleSpin = async (forceOptions?: { forceJackpot?: string, forceFreeSpins?: boolean }) => {
+    setWinAmount(0)
+    setLineWins([])
+    setCollectedPrizes([])
+    // If it's a click event passed by React, ignore it
+    if (forceOptions && 'nativeEvent' in forceOptions) forceOptions = undefined;
+    
     if (!user) return
-    if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return
+    if (!gameState?.isFreeSpinMode && user.credits < betAmount) return
     
     // Play background music on first interaction if not playing
     if (bgMusicRef.current && bgMusicRef.current.paused && !isMutedRef.current) {
@@ -104,41 +194,59 @@ export default function FrankensteinSlot() {
     setJackpotWon(null)
     setLightningSpreads([])
     setFireSpreads([])
-    
-    const spinInterval = setInterval(() => {
-      setGrid(prev => prev.map(row => [...row].sort(() => 0.5 - Math.random())))
-    }, 100)
-
+    setShowOverlay(false)
+    setSpinningReels([true, true, true, true, true])
     try {
-      const result = await spinFrankenstein(betAmount)
+      const result = await spinFrankenstein(betAmount, forceOptions)
       
       setTimeout(() => {
-        clearInterval(spinInterval)
-        setGrid(result.grid)
-        updateBalances(result.newBalance, user.bankBalance)
-        setLastWin(result.totalWin)
-        setWinningLines(result.winningLines)
-        setJackpotWon(result.jackpotWon)
-        
-        // Trigger "It's alive!" audio if free spins are newly triggered
-        if (!gameState?.isFreeSpinMode && result.newState.isFreeSpinMode) {
-          if ('speechSynthesis' in window && !isMutedRef.current) {
-            const msg = new SpeechSynthesisUtterance("It's alive!");
-            msg.pitch = 0.2; // Deeper, monster-like voice
-            msg.rate = 0.8;
-            window.speechSynthesis.speak(msg);
+        // Set the grid early so when reels stop they mount the correct symbol instead of old one
+        setGrid(result.grid);
+
+        // Stop reels sequentially
+        [0, 1, 2, 3, 4].forEach(cIndex => {
+          setTimeout(() => {
+            setSpinningReels(prev => {
+              const next = [...prev]
+              next[cIndex] = false
+              return next
+            })
+          }, cIndex * 200) // 200ms delay between each reel stopping
+        })
+
+        setTimeout(() => {
+          setIsSpinning(false)
+          updateCredits(result.newBalance)
+          setLastWin(result.totalWin)
+          setWinningLines(result.winningLines)
+          setJackpotWon(result.jackpotWon)
+          setCollectedPrizes(result.collectedPrizes || [])
+          
+          const hasBigEvent = result.jackpotWon || result.triggerFreeSpins || (result.collectedPrizes && result.collectedPrizes.length > 0)
+          if (hasBigEvent) {
+            setShowOverlay(true)
+            setTimeout(() => {
+              setShowOverlay(false)
+            }, 2500)
           }
-        }
-        
-        setGameState(result.newState)
-        setLightningSpreads(result.lightningSpreads || [])
-        setFireSpreads(result.fireSpreads || [])
-        
-        setTimeout(() => setIsSpinning(false), 1500)
-      }, 1500)
+
+          // Trigger "It's alive!" audio if free spins are newly triggered
+          if (!gameState?.isFreeSpinMode && result.newState.isFreeSpinMode) {
+            if (!isMutedRef.current) {
+              const itsAliveAudio = new Audio('/audio/its-alive_reverb.mp3')
+              itsAliveAudio.volume = volumeRef.current
+              itsAliveAudio.play().catch(console.error)
+            }
+          }
+          
+          setGameState(result.newState)
+          setLightningSpreads(result.lightningSpreads || [])
+          setFireSpreads(result.fireSpreads || [])
+        }, 1000) // Wait 1 second after last reel stops before showing wins/features
+      }, 1000) // Base spin duration before stopping sequence begins
     } catch (e) {
-      clearInterval(spinInterval)
       setIsSpinning(false)
+      setSpinningReels([false, false, false, false, false])
       console.error(e)
     }
   }
@@ -173,8 +281,29 @@ export default function FrankensteinSlot() {
         backgroundImage: 'url(/images/haunted_house.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        zIndex: -1
+        zIndex: -1,
+        transform: isFreeSpins ? 'scale(1.05)' : 'scale(1)',
+        filter: isFreeSpins ? 'brightness(0.7) contrast(1.1) hue-rotate(15deg)' : 'brightness(0.8)',
+        transition: 'all 2s ease-in-out'
       }} />
+
+      {/* CYAN OVERLAY FOR FREE SPINS */}
+      {isFreeSpins && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'cyan',
+          mixBlendMode: 'overlay',
+          pointerEvents: 'none',
+          zIndex: -1,
+          animation: 'lightningFlash 3s infinite'
+        }} />
+      )}
+      
+      <div style={{
+        zoom: zoomScale,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%',
+      }}>
       
       {/* JACKPOT & PYRAMID DISPLAY */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginBottom: '20px', width: '600px' }}>
@@ -255,9 +384,19 @@ export default function FrankensteinSlot() {
           width: '500px'
         }}>
           
-          <div style={{ height: '30px', textAlign: 'center', color: '#00aaff', fontWeight: 'bold', textShadow: '0 0 10px #00aaff' }}>
-             {lastWin !== null && lastWin > 0 && `WINNER! +$${lastWin.toLocaleString()}`}
-             {jackpotWon && ` | WON ${jackpotWon} JACKPOT!`}
+          <div style={{ height: '30px', textAlign: 'center', color: '#ffcc00', fontWeight: '900', textShadow: '0 0 10px #ffaa00', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <AnimatePresence>
+               {!showOverlay && lastWin !== null && lastWin > 0 && !isSpinning && (
+                 <motion.div
+                   initial={{ scale: 0.5, opacity: 0, y: 10 }}
+                   animate={{ scale: 1, opacity: 1, y: 0 }}
+                   exit={{ opacity: 0, scale: 0.8 }}
+                   style={{ fontSize: '1.5rem', textTransform: 'uppercase', letterSpacing: '2px' }}
+                 >
+                   WINNER! +${lastWin.toLocaleString()}
+                 </motion.div>
+               )}
+             </AnimatePresence>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -267,27 +406,41 @@ export default function FrankensteinSlot() {
                   const isWinning = winningLines.includes(rIndex)
                   const isLightning = lightningSpreads.some(s => s.r === rIndex && s.c === cIndex)
                   const isFire = fireSpreads.some(s => s.r === rIndex && s.c === cIndex)
+                  const isReelSpinning = spinningReels[cIndex]
                   
                   return (
-                    <div key={cIndex} style={{
-                      width: '80px', height: '80px', background: '#0a0a1a',
-                      borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '3.5rem', border: '1px solid #333',
-                      boxShadow: isLightning ? '0 0 20px #00ffff, inset 0 0 20px #00ffff' : (isFire ? '0 0 20px #ff5500, inset 0 0 20px #ff5500' : (isWinning ? 'inset 0 0 20px #00aaff' : 'inset 0 0 15px #000')),
-                      filter: isSpinning ? 'blur(5px) brightness(1.5)' : 'none',
-                      transition: 'all 0.2s',
-                      position: 'relative'
-                    }}>
-                      {symbol}
-                      {/* Lightning Overlay */}
-                      {isLightning && !isSpinning && (
-                        <div style={{ position: 'absolute', inset: 0, border: '4px solid #00ffff', borderRadius: '8px', opacity: 0.8, pointerEvents: 'none' }} />
-                      )}
-                      {/* Fire Overlay */}
-                      {isFire && !isSpinning && (
-                        <div style={{ position: 'absolute', inset: 0, border: '4px solid #ff5500', borderRadius: '8px', opacity: 0.8, pointerEvents: 'none' }} />
-                      )}
-                    </div>
+                      <div key={cIndex} style={{
+                        width: '80px', height: '80px', background: '#0a0a1a',
+                        borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '3.5rem', border: '1px solid #333',
+                        boxShadow: isLightning ? '0 0 20px #00ffff, inset 0 0 20px #00ffff' : (isFire ? '0 0 20px #ff5500, inset 0 0 20px #ff5500' : (isWinning ? '0 0 20px #ffcc00, inset 0 0 30px #ffaa00' : 'inset 0 0 15px #000')),
+                        filter: isReelSpinning ? 'blur(2px) brightness(1.2)' : 'none',
+                        transition: 'all 0.2s',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}>
+                        <motion.div
+                          key={isReelSpinning ? 'spinning' : `stopped-${symbol}`}
+                          initial={isReelSpinning ? { y: -80, scale: 1 } : { y: -50, opacity: 0, scale: 1 }}
+                          animate={isReelSpinning ? { y: 80, scale: 1 } : { y: 0, opacity: 1, scale: isWinning && !isReelSpinning ? 1.25 : 1 }}
+                          transition={isReelSpinning ? { repeat: Infinity, duration: 0.2, ease: 'linear' } : { type: 'spring', bounce: 0.6, duration: 0.6 }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', transformOrigin: 'center' }}
+                        >
+                          {symbol === 'BLUE' ? '⚡' : symbol === 'ORANGE' ? '🔥' : symbol === 'POWER' ? '🔋' : symbol === 'ALIVE' ? '🧟‍♂️' : symbol}
+                        </motion.div>
+                        {/* Winning Overlay */}
+                        {isWinning && !isSpinning && (
+                          <div style={{ position: 'absolute', inset: 0, border: '4px solid #ffcc00', borderRadius: '8px', opacity: 0.9, pointerEvents: 'none' }} />
+                        )}
+                        {/* Lightning Overlay */}
+                        {isLightning && !isSpinning && (
+                          <div style={{ position: 'absolute', inset: 0, border: '4px solid #00ffff', borderRadius: '8px', opacity: 0.8, pointerEvents: 'none' }} />
+                        )}
+                        {/* Fire Overlay */}
+                        {isFire && !isSpinning && (
+                          <div style={{ position: 'absolute', inset: 0, border: '4px solid #ff5500', borderRadius: '8px', opacity: 0.8, pointerEvents: 'none' }} />
+                        )}
+                      </div>
                   )
                 })}
               </div>
@@ -311,30 +464,59 @@ export default function FrankensteinSlot() {
         backdropFilter: 'blur(10px)',
         zIndex: 100
       }}>
-        {/* Mute Button */}
-        <button
-          onClick={() => setIsMuted(prev => !prev)}
-          style={{
+        {/* Admin Test Tools (Left side of deck) */}
+        <div style={{
+          position: 'absolute', right: '100%', top: '0', marginRight: '20px',
+          background: 'rgba(0,0,0,0.8)', padding: '16px', borderRadius: '16px',
+          border: '1px solid rgba(0, 255, 255, 0.3)', display: 'flex', flexDirection: 'column', gap: '12px',
+          backdropFilter: 'blur(10px)', width: '200px', boxShadow: '0 0 20px rgba(0,0,0,0.5)'
+        }}>
+          <h4 style={{ margin: 0, color: '#00ffff', fontSize: '0.9rem', textAlign: 'center', textTransform: 'uppercase' }}>Admin Tools</h4>
+          
+          <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '6px' }} onClick={() => handleSpin({ forceFreeSpins: true })}>
+            Force Free Spins
+          </button>
+
+          <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '6px', background: 'rgba(255,0,0,0.3)', borderColor: 'red' }} onClick={async () => {
+             await resetFrankensteinGame();
+             window.location.reload();
+          }}>
+            ⚠️ RESET GAME
+          </button>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+             {['MINI', 'MINOR', 'MAXI', 'SUPER', 'MAJOR', 'GRAND'].map(jp => (
+               <button key={jp} className="btn-secondary" style={{ fontSize: '0.6rem', padding: '4px' }} onClick={() => handleSpin({ forceJackpot: jp })}>
+                 + {jp}
+               </button>
+             ))}
+          </div>
+        </div>
+
+        {/* Audio Controls (Top Right of deck) */}
+        <div style={{
             position: 'absolute',
-            top: '-40px',
+            top: '-50px',
             right: '0',
             background: 'rgba(0,0,0,0.6)',
             border: '2px solid #00ffff',
-            borderRadius: '50%',
-            width: '40px',
-            height: '40px',
-            color: '#00ffff',
-            cursor: 'pointer',
+            borderRadius: '25px',
+            padding: '6px 12px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.2rem',
+            gap: '8px',
             boxShadow: '0 0 10px #00ffff'
-          }}
-          title={isMuted ? "Unmute Audio" : "Mute Audio"}
-        >
-          {isMuted ? '🔇' : '🔊'}
-        </button>
+        }}>
+          <button onClick={() => setIsMuted(prev => !prev)} style={{ background: 'none', border: 'none', color: '#00ffff', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>
+            {isMuted ? '🔇' : '🔊'}
+          </button>
+          <input 
+            type="range" min="0" max="1" step="0.05" 
+            value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))}
+            style={{ width: '80px', accentColor: '#00ffff', cursor: 'pointer' }}
+            title="Volume"
+          />
+        </div>
 
         {/* TOP: Mini Display */}
         <div style={{
@@ -350,7 +532,7 @@ export default function FrankensteinSlot() {
           width: '100%'
         }}>
           <div style={{ color: '#00aaff', fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>CREDIT</div>
-          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>
+          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>
         </div>
 
         {/* CENTER: Bet Buttons (3x2 grid) */}
@@ -397,15 +579,15 @@ export default function FrankensteinSlot() {
             boxShadow: '0 0 30px #00aaff, inset 0 0 20px #00ffff',
             color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 'not-allowed' : 'pointer',
-            opacity: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 0.5 : 1,
+            cursor: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 'not-allowed' : 'pointer',
+            opacity: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 0.5 : 1,
             position: 'relative',
             transform: isSpinning ? 'scale(0.95)' : 'scale(1)',
             transition: 'all 0.1s',
             marginTop: '8px'
           }}
-          onClick={handleSpin}
-          disabled={isSpinning || (!isFreeSpins && user.chipBalance < betAmount)}
+          onClick={() => handleSpin()}
+          disabled={isSpinning || (!isFreeSpins && user.credits < betAmount)}
         >
           {/* Inner metallic ring */}
           <div style={{
@@ -447,8 +629,18 @@ export default function FrankensteinSlot() {
         </ul>
       </div>
 
+      </div>
+
       {/* Add specific CSS for pyramid blocks */}
       <style dangerouslySetInnerHTML={{__html: `
+        @keyframes lightningFlash {
+          0% { opacity: 0; }
+          5% { opacity: 0.4; }
+          10% { opacity: 0; }
+          15% { opacity: 0.6; }
+          20% { opacity: 0; }
+          100% { opacity: 0; }
+        }
         .jackpot-block {
           border: 3px solid #ffaa00;
           background: linear-gradient(180deg, rgba(255,100,0,0.2) 0%, rgba(200,0,0,0.6) 100%);
@@ -505,6 +697,116 @@ export default function FrankensteinSlot() {
           100% { transform: scale(1.05); opacity: 0.9; filter: brightness(1.5); }
         }
       `}} />
+
+      {/* FIXED MEGA OVERLAY FOR EVENTS */}
+      <AnimatePresence>
+        {showOverlay && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'radial-gradient(circle, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 70%)',
+          }}>
+            <motion.div 
+              initial={{ scale: 0.1, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.1, opacity: 0 }}
+              transition={{ type: 'spring', bounce: 0.7, duration: 0.8 }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textShadow: '0 0 20px #ffea00, 0 0 40px #ffaa00, 0 0 60px #ff5500, 0 0 80px #ff0000',
+                padding: '50px',
+                width: '100vw',
+              }}
+            >
+              {/* Free Spins Trigger */}
+              {gameState?.isFreeSpinMode && (
+                <motion.div 
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ repeat: Infinity, duration: 1 }}
+                  style={{ fontSize: '3.5rem', fontWeight: '900', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: '20px', textTransform: 'uppercase' }}
+                >
+                  10 FREE SPINS WON!
+                </motion.div>
+              )}
+
+              {/* Collected Prizes (Blue Boxes & Jackpots) */}
+              {collectedPrizes.length > 0 && (
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {Object.values(collectedPrizes.reduce((acc, curr) => {
+                    const key = curr.isJackpot ? curr.jackpotName : curr.prizeName;
+                    if (!acc[key]) acc[key] = { ...curr, count: 1 };
+                    else {
+                      acc[key].amount += curr.amount;
+                      acc[key].count += 1;
+                    }
+                    return acc;
+                  }, {} as Record<string, any>)).map((p: any, i: number) => {
+                    const isJackpot = p.isJackpot || !p.prizeName;
+                    return (
+                      <motion.div 
+                        key={i}
+                        initial={{ y: 50, opacity: 0, scale: 0.5 }}
+                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                        transition={{ delay: i * 0.15, type: 'spring', bounce: 0.5 }}
+                        style={{ 
+                          background: isJackpot ? 'rgba(255, 60, 0, 0.8)' : 'rgba(0, 80, 200, 0.8)', 
+                          padding: '16px 32px', 
+                          borderRadius: '12px', 
+                          color: '#fff', 
+                          fontWeight: '900', 
+                          fontSize: '2rem', 
+                          border: isJackpot ? '4px solid #ffcc00' : '4px solid #00ffff', 
+                          boxShadow: isJackpot ? '0 0 30px #ff5500, inset 0 0 20px #ffaa00' : '0 0 30px #00aaff, inset 0 0 20px #00ffff',
+                          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px'
+                        }}
+                      >
+                        <span style={{ fontSize: '2.5rem' }}>{isJackpot ? '🔥' : '⚡'}</span>
+                        <span>
+                          {isJackpot ? `${p.jackpotName} JACKPOT!` : `STATIC PRIZE`} 
+                          {p.count > 1 ? ` (x${p.count}) ` : ' '}
+                          <span style={{ color: isJackpot ? '#ffea00' : '#00ffff' }}>+${p.amount.toLocaleString()}</span>
+                        </span>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Total Win Amount */}
+              {lastWin !== null && lastWin > 0 && (
+                <>
+                  <motion.div 
+                    animate={{ rotate: [0, -5, 5, -5, 0] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                    style={{ fontSize: '5rem', fontWeight: '900', color: '#ffea00', textTransform: 'uppercase', letterSpacing: '4px' }}
+                  >
+                    WINNER!
+                  </motion.div>
+                  <div style={{ fontSize: '8rem', fontWeight: '900', color: '#ffffff', textShadow: '0 0 40px #00ffff, 0 0 80px #0088ff' }}>
+                    +${lastWin.toLocaleString()}
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

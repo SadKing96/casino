@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useUser } from '@/context/UserContext'
-import { withdrawChips, depositChips, buyCoins } from '@/app/actions'
+import { withdrawCredits, depositCredits, buyCoins } from '@/app/actions'
 import FriendsList from './FriendsList'
 
 export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: { initialLeaderboard: any[], enabledGames?: string[] }) {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [view, setView] = useState<'lobby' | 'category'>('lobby')
   const [category, setCategory] = useState('Slots')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -28,8 +28,8 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
     if (!user) return
     setIsProcessing(true)
     try {
-      const updatedUser = await withdrawChips(chipAmount)
-      updateBalances(updatedUser!.chipBalance, updatedUser!.bankBalance)
+      const updatedUser = await withdrawCredits(chipAmount)
+      updateCredits(updatedUser!.credits)
     } catch (e) {
       console.error(e)
     }
@@ -40,8 +40,8 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
     if (!user) return
     setIsProcessing(true)
     try {
-      const updatedUser = await depositChips(chipAmount)
-      updateBalances(updatedUser!.chipBalance, updatedUser!.bankBalance)
+      const updatedUser = await depositCredits(chipAmount)
+      updateCredits(updatedUser!.credits)
     } catch (e) {
       console.error(e)
     }
@@ -53,7 +53,7 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
     setIsProcessing(true)
     try {
       const updatedUser = await buyCoins(1000)
-      updateBalances(updatedUser!.chipBalance, updatedUser!.bankBalance)
+      updateCredits(updatedUser!.credits)
     } catch (e) {
       console.error(e)
     }
@@ -81,22 +81,33 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
         </div>
 
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '50%' }}>
-          <h2 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>Categories</h2>
+          <h2 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>Top Played Games</h2>
           <div className="lobby-col-content" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {['Slots', 'Table Games', 'Arcade'].map(cat => (
-              <button
-                key={cat}
-                className="btn-secondary"
-                style={{ 
-                  textAlign: 'left', 
-                  borderColor: category === cat ? 'var(--neon-blue)' : 'var(--surface-border)',
-                  color: category === cat ? 'var(--neon-blue)' : '#fff',
-                  background: category === cat ? 'rgba(0, 229, 255, 0.1)' : 'transparent'
-                }}
-                onClick={() => { setCategory(cat); setView('category'); }}
-              >
-                {cat}
-              </button>
+            {[
+              { name: 'Frankenstein Slots', href: '/games/frankenstein', icon: '🧟‍♂️' },
+              { name: 'Blackjack', href: '/games/blackjack', icon: '🃏' },
+              { name: 'The Casino Bar', href: '/games/bar', icon: '🍸' },
+            ].map(game => (
+              <Link key={game.name} href={user ? game.href : "/login"} style={{ textDecoration: 'none' }}>
+                <button
+                  className="btn-secondary"
+                  style={{ 
+                    textAlign: 'left', 
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    borderColor: 'var(--surface-border)',
+                    color: '#fff',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--neon-gold)'; e.currentTarget.style.color = 'var(--neon-gold)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--surface-border)'; e.currentTarget.style.color = '#fff'; }}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>{game.icon}</span>
+                  {game.name}
+                </button>
+              </Link>
             ))}
           </div>
         </div>
@@ -108,24 +119,28 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
           <div className="lobby-col-content" style={{ display: 'flex', flexDirection: 'column', gap: '30px', padding: '20px 0' }}>
             
 
-            {/* Featured Game Slim Banner */}
-            <div>
-              <h3 style={{ fontSize: '0.9rem', color: 'var(--neon-gold)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>★ Featured Game</h3>
-              <Link href={user ? "/games/frankenstein" : "/login"} style={{ textDecoration: 'none' }}>
+            {/* The Lounge / Bar Special Banner */}
+            <div style={{ marginBottom: '10px' }}>
+              <h3 style={{ fontSize: '0.9rem', color: '#ff00ff', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>🍸 The Lounge</h3>
+              <Link href={user ? "/games/bar" : "/login"} style={{ textDecoration: 'none' }}>
                 <div className="glass-panel" style={{ 
                   display: 'flex', alignItems: 'center', padding: '16px 24px', borderRadius: '16px',
-                  background: 'linear-gradient(90deg, rgba(42, 8, 69, 0.4) 0%, rgba(100, 65, 165, 0.2) 100%)',
-                  border: '1px solid rgba(100, 65, 165, 0.3)', transition: 'all 0.2s', cursor: 'pointer'
-                }}>
-                  <div style={{ fontSize: '2.5rem', marginRight: '20px' }}>🧟‍♂️⚡</div>
+                  background: 'linear-gradient(90deg, rgba(255, 0, 128, 0.4) 0%, rgba(128, 0, 255, 0.2) 100%)',
+                  border: '1px solid rgba(255, 0, 255, 0.3)', transition: 'all 0.2s', cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 0 15px rgba(255, 0, 255, 0.4)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
+                >
+                  <div style={{ fontSize: '2.5rem', marginRight: '20px' }}>🍻</div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', color: '#fff' }}>Frankenstein</h3>
-                    <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: 0, color: '#fff' }}>Our most popular 5-Reel slot machine!</p>
+                    <h3 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', color: '#fff' }}>The Casino Bar</h3>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: 0, color: '#fff' }}>Serve drinks, keep customers happy, and earn tips!</p>
                   </div>
-                  <div className="btn-primary" style={{ padding: '8px 24px', borderRadius: '20px', fontSize: '0.9rem' }}>{user ? 'Play' : 'Log in to Play'}</div>
+                  <div className="btn-primary" style={{ padding: '8px 24px', borderRadius: '20px', fontSize: '0.9rem', background: 'linear-gradient(135deg, #ff00ff, #8a2be2)', border: 'none' }}>{user ? 'Enter' : 'Log in'}</div>
                 </div>
               </Link>
             </div>
+
 
             {/* Sleek Categories */}
             <div style={{ textAlign: 'center' }}>
@@ -404,6 +419,27 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
                   </div>
                 </Link>
               )}
+              {category === 'Arcade' && (
+                <Link href={user ? "/games/bar" : "/login"} style={{ textDecoration: 'none' }}>
+                  <div className="glass-panel game-card" style={{ 
+                    width: '240px', height: '300px', display: 'flex', flexDirection: 'column',
+                    transition: 'transform var(--transition-normal), box-shadow var(--transition-normal)',
+                    cursor: 'pointer', overflow: 'hidden'
+                  }}>
+                    <div style={{ height: '160px', background: 'linear-gradient(135deg, #4a0072 0%, #000000 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '3rem' }}>🍸🍻</span>
+                    </div>
+                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                      <h3 style={{ fontSize: '1.1rem' }}>The Bar</h3>
+                      <p style={{ opacity: 0.7, fontSize: '0.8rem' }}>Time Management & Tips</p>
+                      <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--neon-gold)', fontWeight: 'bold', fontSize: '0.9rem' }}>{user ? 'Play Now' : 'Log in to Play'}</span>
+                        <span>→</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              )}
             </div>
           </div>
         )}
@@ -416,51 +452,10 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
           <div className="lobby-col-content">
             {user ? (
               <>
-                <div style={{ marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>Bank Balance</div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 'bold' }}>${user.bankBalance.toLocaleString()}</div>
-                </div>
+
                 <div style={{ marginBottom: '12px' }}>
                   <div style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--neon-gold)' }}>Wallet</div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'var(--neon-gold)' }}>${user.chipBalance.toLocaleString()}</div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                  {[10, 50, 100, 500].map(amount => (
-                    <button
-                      key={amount}
-                      className="btn-secondary"
-                      style={{ 
-                        flex: '1 0 40%',
-                        padding: '6px',
-                        borderColor: chipAmount === amount ? 'var(--neon-gold)' : 'var(--surface-border)',
-                        color: chipAmount === amount ? 'var(--neon-gold)' : '#fff',
-                        background: chipAmount === amount ? 'rgba(242, 169, 0, 0.1)' : 'transparent'
-                      }}
-                      onClick={() => setChipAmount(amount)}
-                    >
-                      ${amount}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', gap: '6px', flexDirection: 'column' }}>
-                  <button 
-                    className="btn-primary" 
-                    disabled={isProcessing || user.bankBalance < chipAmount}
-                    onClick={handleWithdraw}
-                    style={{ opacity: (isProcessing || user.bankBalance < chipAmount) ? 0.5 : 1, padding: '8px' }}
-                  >
-                    Withdraw ${chipAmount}
-                  </button>
-                  <button 
-                    className="btn-secondary"
-                    disabled={isProcessing || user.chipBalance < chipAmount}
-                    onClick={handleDeposit}
-                    style={{ opacity: (isProcessing || user.chipBalance < chipAmount) ? 0.5 : 1, padding: '8px' }}
-                  >
-                    Deposit ${chipAmount}
-                  </button>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'var(--neon-gold)' }}>${user.credits.toLocaleString()}</div>
                 </div>
 
                 <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '12px 0' }} />
@@ -483,9 +478,22 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
         </div>
 
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '40%' }}>
-          <h2 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>Friends</h2>
-          <div className="lobby-col-content" style={{ flex: 1, overflow: 'hidden' }}>
-            <FriendsList />
+          <h2 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>Library (Guides)</h2>
+          <div className="lobby-col-content" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {[
+              { title: 'How to play Slots', desc: 'Match symbols across the paylines. Orange fire symbols trigger the Jackpot wheel, and Blue lightning symbols give instant cash prizes!' },
+              { title: 'Blackjack Strategy', desc: 'Always split Aces and 8s. Stand on 17. The dealer must hit on soft 17.' },
+              { title: 'Craps Rules', desc: 'Bet on the Pass Line. 7 or 11 on the come-out roll is an instant win.' },
+              { title: 'Bar Management', desc: 'Keep your casino customers happy! Serve drinks fast to earn massive tips and level up your establishment.' }
+            ].map((guide, i) => (
+              <div key={i} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', borderLeft: '3px solid var(--neon-blue)', cursor: 'pointer', transition: 'all 0.2s' }}
+                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                   onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+              >
+                <h4 style={{ margin: '0 0 6px 0', color: 'var(--neon-blue)', fontSize: '0.95rem' }}>{guide.title}</h4>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#ccc', lineHeight: '1.4' }}>{guide.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>

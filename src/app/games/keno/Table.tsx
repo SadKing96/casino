@@ -6,7 +6,7 @@ import { KenoBet } from './utils'
 import { useState, useEffect } from 'react'
 
 export default function KenoTableUI({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [table, setTable] = useState<any>(null)
   const [selectedChip, setSelectedChip] = useState<number>(10)
   const [betAmount, setBetAmount] = useState(0)
@@ -26,7 +26,7 @@ export default function KenoTableUI({ tableId, onLeave }: { tableId: string, onL
       const { getUser } = await import('@/app/actions')
       const freshUser = await getUser()
       if (freshUser) {
-        updateBalances(freshUser.chipBalance, freshUser.bankBalance)
+        updateCredits(freshUser.credits)
       }
     }
   }
@@ -48,7 +48,7 @@ export default function KenoTableUI({ tableId, onLeave }: { tableId: string, onL
     setIsProcessing(true)
     try {
       await placeBet(tableId, finalBet, selectedNumbers)
-      updateBalances(user.chipBalance - finalBet, user.bankBalance)
+      updateCredits(user.credits - finalBet)
       await loadTable()
     } catch (e: any) {
       alert(e.message)
@@ -297,7 +297,7 @@ export default function KenoTableUI({ tableId, onLeave }: { tableId: string, onL
 
           <div style={{ border: '2px solid #0055ff', borderRadius: '8px', padding: '15px 30px', textAlign: 'center', background: '#000', marginLeft: '20px', boxShadow: 'inset 0 0 15px rgba(0, 85, 255, 0.3)' }}>
             <div style={{ color: '#0055ff', fontWeight: 'bold', fontSize: '1.2rem', letterSpacing: '2px' }}>CREDIT</div>
-            <div style={{ color: '#FFD700', fontSize: '2.5rem', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>
+            <div style={{ color: '#FFD700', fontSize: '2.5rem', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>
           </div>
         </div>
       </div>

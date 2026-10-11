@@ -50,11 +50,12 @@ export async function joinTable(tableId: string) {
     players.push({
       id: userId,
       name: user.username,
-      chips: user.chipBalance,
+      chips: user.credits,
       cards: [],
       currentBet: 0,
       status: 'ACTIVE',
-      isBot: false
+      isBot: false,
+      hasActed: false
     })
 
     await prisma.holdemTable.update({
@@ -95,7 +96,8 @@ export async function dealHand(tableId: string) {
         cards: [],
         currentBet: 0,
         status: 'ACTIVE',
-        isBot: true
+        isBot: true,
+        hasActed: false
       })
     }
   }
@@ -104,7 +106,7 @@ export async function dealHand(tableId: string) {
   for (let p of players) {
     if (!p.isBot) {
       const u = await prisma.user.findUnique({ where: { id: p.id } })
-      if (u) p.chips = u.chipBalance
+      if (u) p.chips = u.credits
     }
   }
 
@@ -112,10 +114,11 @@ export async function dealHand(tableId: string) {
     p.cards = []
     p.currentBet = 0
     p.status = p.chips <= 0 ? 'OUT' : 'ACTIVE'
+    p.hasActed = false
   })
 
   const activePlayers = players.filter(p => p.status === 'ACTIVE')
-  if (activePlayers.length < 2) throw new Error("Not enough players with chips")
+  if (activePlayers.length < 2) throw new Error("Not enough players with credits")
 
   // Move dealer button
   let nextDealer = (state.dealerButtonIndex + 1) % players.length
@@ -134,13 +137,13 @@ export async function dealHand(tableId: string) {
   players[sbIndex].chips -= BLIND_SMALL
   players[sbIndex].currentBet = BLIND_SMALL
   if (!players[sbIndex].isBot) {
-    await prisma.user.update({ where: { id: players[sbIndex].id }, data: { chipBalance: { decrement: BLIND_SMALL } } })
+    await prisma.user.update({ where: { id: players[sbIndex].id }, data: { credits: { decrement: BLIND_SMALL } } })
   }
 
   players[bbIndex].chips -= BLIND_BIG
   players[bbIndex].currentBet = BLIND_BIG
   if (!players[bbIndex].isBot) {
-    await prisma.user.update({ where: { id: players[bbIndex].id }, data: { chipBalance: { decrement: BLIND_BIG } } })
+    await prisma.user.update({ where: { id: players[bbIndex].id }, data: { credits: { decrement: BLIND_BIG } } })
   }
 
   const pot = BLIND_SMALL + BLIND_BIG
@@ -189,6 +192,7 @@ export async function processAiTurns(state: any, callerUserId: string) {
 
   while (status !== 'LOBBY' && status !== 'GAME_OVER' && players[turnIndex].isBot && players[turnIndex].status === 'ACTIVE') {
     const bot = players[turnIndex]
+    bot.hasActed = true
     const amountToCall = currentBet - bot.currentBet
 
     if (amountToCall > 0) {
@@ -199,6 +203,18 @@ export async function processAiTurns(state: any, callerUserId: string) {
         bot.chips -= callAmt
         bot.currentBet += callAmt
         pot += callAmt
+        if (bot.chips === 0) bot.status = 'ALL_IN'
+      }
+    } else {
+      // 10% chance to raise if checking
+      if (Math.random() > 0.9 && bot.chips > 20) {
+        const raiseAmt = 20
+        bot.chips -= raiseAmt
+        bot.currentBet += raiseAmt
+        currentBet = bot.currentBet
+        pot += raiseAmt
+        if (bot.chips === 0) bot.status = 'ALL_IN'
+        players.forEach(p => { if (p.id !== bot.id && p.status !== 'FOLDED' && p.status !== 'ALL_IN') p.hasActed = false })
       }
     }
 
@@ -240,11 +256,15 @@ function isBettingRoundOver(players: PlayerState[], highestBet: number, turnInde
   const active = players.filter(p => p.status === 'ACTIVE')
   if (active.length <= 1) return true
   const allMatched = active.every(p => p.currentBet === highestBet)
-  return allMatched
+  const allActed = active.every(p => p.hasActed)
+  return allMatched && allActed
 }
 
 function advanceStreet(players: PlayerState[], pot: number, status: string) {
-  players.forEach(p => p.currentBet = 0)
+  players.forEach(p => {
+    p.currentBet = 0
+    p.hasActed = false
+  })
   
   let nextStatus = status
   if (status === 'PRE_FLOP') nextStatus = 'FLOP'
@@ -283,7 +303,7 @@ async function resolveShowdown(tableId: string, players: PlayerState[], communit
   
   winner.chips += pot
   if (!winner.isBot) {
-    await prisma.user.update({ where: { id: winner.id }, data: { chipBalance: { increment: pot } } })
+    await prisma.user.update({ where: { id: winner.id }, data: { credits: { increment: pot } } })
   }
 
   const finalState = await prisma.holdemTable.update({
@@ -320,22 +340,29 @@ export async function playerAction(tableId: string, action: 'FOLD' | 'CALL' | 'R
   if (action === 'FOLD') {
     human.status = 'FOLDED'
   } else if (action === 'CALL') {
+    human.hasActed = true
     const callAmt = Math.min(human.chips, currentBet - human.currentBet)
     human.chips -= callAmt
     human.currentBet += callAmt
     pot += callAmt
-    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: callAmt } } })
+    if (human.chips === 0) human.status = 'ALL_IN'
+    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: callAmt } } })
   } else if (action === 'RAISE') {
+    human.hasActed = true
     const raiseAmt = amount || (currentBet + 20)
     const callAmt = currentBet - human.currentBet
     const totalDeduct = callAmt + raiseAmt
-    if (human.chips < totalDeduct) throw new Error("Not enough chips")
+    if (human.chips < totalDeduct) throw new Error("Not enough credits")
     
     human.chips -= totalDeduct
     human.currentBet += totalDeduct
     currentBet = human.currentBet
     pot += totalDeduct
-    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: totalDeduct } } })
+    if (human.chips === 0) human.status = 'ALL_IN'
+    
+    players.forEach(p => { if (p.id !== human.id && p.status !== 'FOLDED' && p.status !== 'ALL_IN') p.hasActed = false })
+    
+    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: totalDeduct } } })
   }
 
   turnIndex = (turnIndex + 1) % players.length

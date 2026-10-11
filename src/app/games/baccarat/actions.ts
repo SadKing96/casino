@@ -35,12 +35,12 @@ export async function placeBet(tableId: string, amount: number, type: BaccaratBe
   if (table.status !== 'BETTING') throw new Error("Bets are closed")
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user || user.chipBalance < amount) throw new Error("Insufficient chips")
+  if (!user || user.credits < amount) throw new Error("Insufficient credits")
 
   // Deduct chips
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: amount } }
+    data: { credits: { decrement: amount } }
   })
 
   const activeBets: BaccaratBet[] = JSON.parse(table.activeBets)
@@ -88,7 +88,7 @@ export async function dealCards(tableId: string) {
       
       await prisma.user.update({
         where: { id: bet.userId },
-        data: { chipBalance: { increment: Math.floor(payout) } }
+        data: { credits: { increment: Math.floor(payout) } }
       })
       const u = await prisma.user.findUnique({ where: { id: bet.userId } })
       chatHistory.push(`[${new Date().toLocaleTimeString()}] ${u?.username} won $${Math.floor(payout - bet.amount)}!`)
@@ -97,7 +97,7 @@ export async function dealCards(tableId: string) {
        if (bet.type === 'PLAYER' || bet.type === 'BANKER') {
           await prisma.user.update({
             where: { id: bet.userId },
-            data: { chipBalance: { increment: bet.amount } }
+            data: { credits: { increment: bet.amount } }
           })
           const u = await prisma.user.findUnique({ where: { id: bet.userId } })
           chatHistory.push(`[${new Date().toLocaleTimeString()}] ${u?.username} PUSH on ${bet.type}`)

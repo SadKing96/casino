@@ -16,7 +16,7 @@ const JACKPOT_REQ: Record<string, number> = { MINI: 2, MINOR: 2, MAXI: 3, SUPER:
 const JACKPOT_MULT: Record<string, number> = { MINI: 10, MINOR: 25, MAXI: 50, SUPER: 150, MAJOR: 300, GRAND: 2000 }
 
 export default function PiggiesSlot() {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [grid, setGrid] = useState<string[][]>(INITIAL_GRID)
   const [isSpinning, setIsSpinning] = useState(false)
   const [betAmount, setBetAmount] = useState(10)
@@ -29,25 +29,46 @@ export default function PiggiesSlot() {
   
   const [globalJackpots, setGlobalJackpots] = useState<any>(null)
   const [activePlayers, setActivePlayers] = useState<string[]>([])
+  
+  const [zoomScale, setZoomScale] = useState(1)
+
+  useEffect(() => {
+    const handleResize = () => {
+      // Scale down if height is small
+      const targetHeight = 1000 
+      if (window.innerHeight < targetHeight) {
+        setZoomScale(window.innerHeight / targetHeight)
+      } else {
+        setZoomScale(1)
+      }
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Audio state
   const [isMuted, setIsMuted] = useState(false)
+  const [volume, setVolume] = useState(0.3)
   const isMutedRef = useRef(false)
+  const volumeRef = useRef(0.3)
   const bgMusicRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     isMutedRef.current = isMuted
+    volumeRef.current = volume
     if (bgMusicRef.current) {
       bgMusicRef.current.muted = isMuted
+      bgMusicRef.current.volume = volume
     }
-  }, [isMuted])
+  }, [isMuted, volume])
 
   useEffect(() => {
     // Initialize background music
     if (typeof window !== 'undefined') {
       bgMusicRef.current = new Audio('/audio/bg_music.mp3')
       bgMusicRef.current.loop = true
-      bgMusicRef.current.volume = 0.3
+      bgMusicRef.current.volume = volumeRef.current
     }
     
     return () => {
@@ -88,7 +109,7 @@ export default function PiggiesSlot() {
 
   const handleSpin = async () => {
     if (!user) return
-    if (!gameState?.isFreeSpinMode && user.chipBalance < betAmount) return
+    if (!gameState?.isFreeSpinMode && user.credits < betAmount) return
     
     // Play background music on first interaction if not playing
     if (bgMusicRef.current && bgMusicRef.current.paused && !isMutedRef.current) {
@@ -139,7 +160,7 @@ export default function PiggiesSlot() {
   }
 
   const finishSpin = (result: any) => {
-    updateBalances(result.newBalance, user!.bankBalance)
+    updateCredits(result.newBalance)
     setLastWin(result.totalWin)
     setWinningLines(result.winningLines)
     setJackpotWins(result.jackpotWins || [])
@@ -181,6 +202,11 @@ export default function PiggiesSlot() {
         backgroundPosition: 'center',
         zIndex: -1
       }} />
+
+      <div style={{
+        zoom: zoomScale,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%',
+      }}>
 
       {/* JACKPOTS (Massive Pyramid) */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginBottom: '20px', width: '600px' }}>
@@ -347,31 +373,31 @@ export default function PiggiesSlot() {
         backdropFilter: 'blur(10px)',
         zIndex: 100
       }}>
-        {/* Mute Button */}
-        <button
-          onClick={() => setIsMuted(prev => !prev)}
-          style={{
+
+        {/* Audio Controls (Top Right of deck) */}
+        <div style={{
             position: 'absolute',
-            top: '-40px',
+            top: '-50px',
             right: '0',
             background: 'rgba(0,0,0,0.6)',
             border: '2px solid #ffcc00',
-            borderRadius: '50%',
-            width: '40px',
-            height: '40px',
-            color: '#ffcc00',
-            cursor: 'pointer',
+            borderRadius: '25px',
+            padding: '6px 12px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.2rem',
+            gap: '8px',
             boxShadow: '0 0 10px #ffcc00'
-          }}
-          title={isMuted ? "Unmute Audio" : "Mute Audio"}
-        >
-          {isMuted ? '🔇' : '🔊'}
-        </button>
-
+        }}>
+          <button onClick={() => setIsMuted(prev => !prev)} style={{ background: 'none', border: 'none', color: '#ffcc00', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>
+            {isMuted ? '🔇' : '🔊'}
+          </button>
+          <input 
+            type="range" min="0" max="1" step="0.05" 
+            value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))}
+            style={{ width: '80px', accentColor: '#ffcc00', cursor: 'pointer' }}
+            title="Volume"
+          />
+        </div>
         {/* TOP: Mini Display */}
         <div style={{
           background: '#000',
@@ -386,7 +412,7 @@ export default function PiggiesSlot() {
           width: '100%'
         }}>
           <div style={{ color: '#d4af37', fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>CREDIT</div>
-          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.chipBalance.toLocaleString()}</div>
+          <div style={{ color: '#fff', fontSize: '1.2rem', fontFamily: 'monospace', fontWeight: 'bold' }}>${user.credits.toLocaleString()}</div>
         </div>
 
         {/* CENTER: Bet Buttons (3x2 grid) */}
@@ -433,15 +459,15 @@ export default function PiggiesSlot() {
             boxShadow: '0 0 30px rgba(212, 175, 55, 0.8), inset 0 0 20px #fff',
             color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 'not-allowed' : 'pointer',
-            opacity: (!isFreeSpins && user.chipBalance < betAmount) || isSpinning ? 0.5 : 1,
+            cursor: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 'not-allowed' : 'pointer',
+            opacity: (!isFreeSpins && user.credits < betAmount) || isSpinning ? 0.5 : 1,
             position: 'relative',
             transform: isSpinning ? 'scale(0.95)' : 'scale(1)',
             transition: 'all 0.1s',
             marginTop: '8px'
           }}
           onClick={handleSpin}
-          disabled={isSpinning || (!isFreeSpins && user.chipBalance < betAmount)}
+          disabled={isSpinning || (!isFreeSpins && user.credits < betAmount)}
         >
           {/* Inner metallic ring */}
           <div style={{
@@ -482,6 +508,8 @@ export default function PiggiesSlot() {
             </li>
           ))}
         </ul>
+      </div>
+      
       </div>
 
       {/* Add specific CSS for pyramid blocks and glass jars */}

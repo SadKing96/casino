@@ -35,11 +35,11 @@ export async function placeBet(tableId: string, amount: number, selectedNumbers:
   if (table.status !== 'BETTING') throw new Error("Game already drawing")
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user || user.chipBalance < amount) throw new Error("Insufficient chips")
+  if (!user || user.credits < amount) throw new Error("Insufficient credits")
 
   await prisma.user.update({
     where: { id: userId },
-    data: { chipBalance: { decrement: amount } }
+    data: { credits: { decrement: amount } }
   })
 
   const activeBets: Record<string, KenoBet> = JSON.parse(table.activeBets)
@@ -80,7 +80,7 @@ export async function drawNumbers(tableId: string) {
     if (profit > 0) {
       await prisma.user.update({
         where: { id: uid },
-        data: { chipBalance: { increment: profit } }
+        data: { credits: { increment: profit } }
       })
     }
   }

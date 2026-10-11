@@ -59,11 +59,11 @@ export async function spinBuffalo(betAmount: number) {
   let state = await prisma.buffaloState.findUnique({ where: { userId } })
   if (!state) state = await prisma.buffaloState.create({ data: { userId } })
 
-  if (!state.isFreeSpinMode && user.chipBalance < betAmount) {
+  if (!state.isFreeSpinMode && user.credits < betAmount) {
     throw new Error("Insufficient chip balance")
   }
   if (!state.isFreeSpinMode) {
-    await prisma.user.update({ where: { id: userId }, data: { chipBalance: { decrement: betAmount } } })
+    await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: betAmount } } })
   }
 
   // Generate 5x4 Grid
@@ -237,7 +237,7 @@ export async function spinBuffalo(betAmount: number) {
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: { 
-      chipBalance: { increment: Math.floor(totalWin) },
+      credits: { increment: Math.floor(totalWin) },
       lastSeenAt: new Date()
     }
   })
@@ -267,6 +267,6 @@ export async function spinBuffalo(betAmount: number) {
     wildMultipliers,
     newlyTriggeredSpins,
     newState: updatedState,
-    newBalance: updatedUser.chipBalance
+    newBalance: updatedUser.credits
   }
 }

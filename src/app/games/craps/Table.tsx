@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { io } from 'socket.io-client'
 
 export default function CrapsTable({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
-  const { user, updateBalances } = useUser()
+  const { user, updateCredits } = useUser()
   const [gameState, setGameState] = useState<any>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [selectedChip, setSelectedChip] = useState<number>(5)
@@ -41,11 +41,11 @@ export default function CrapsTable({ tableId, onLeave }: { tableId: string, onLe
   const handlePlaceBet = async (type: CrapsBetType) => {
     if (!user || isProcessing || rollingDice) return
     setIsProcessing(true)
-    const oldBalance = user.chipBalance
+    const oldBalance = user.credits
     try {
       const result = await placeBet(tableId, type, selectedChip)
       setGameState(result)
-      updateBalances(oldBalance - selectedChip, user.bankBalance)
+      updateCredits(oldBalance - selectedChip)
       await notifyOthers()
     } catch (e: any) {
       console.error(e)
