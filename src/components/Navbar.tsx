@@ -57,8 +57,6 @@ export function Navbar() {
               <Link href="/admin" className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.9rem', textDecoration: 'none', border: '1px solid #ffcc00', color: '#ffcc00' }}>Admin Panel</Link>
             )}
 
-            <Link href="/bank" className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.9rem', textDecoration: 'none' }}>Bank</Link>
-
             <button onClick={logout} className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.9rem', border: 'none' }}>Logout</button>
           </>
         ) : (

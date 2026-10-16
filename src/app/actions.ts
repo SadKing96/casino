@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import bcrypt from 'bcryptjs'
 
 function stripUser(user: any) {
@@ -49,86 +50,8 @@ export async function logout() {
   cookieStore.delete('userId')
 }
 
-export async function buyCoins(amount: number = 1000) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value
-  
-  if (!userId) throw new Error("Not logged in")
-  
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: { credits: { increment: amount } }
-  })
-
-  await prisma.transaction.create({
-    data: {
-      userId: user.id,
-      type: 'FIAT_DEPOSIT',
-      amount: amount
-    }
-  })
-  
-  return stripUser(user)
-}
-
-export async function getUserTransactions() {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value
-  
-  if (!userId) return []
-  
-  return await prisma.transaction.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-    take: 50
-  })
-}
-
-export async function withdrawCredits(amount: number) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value
-  
-  if (!userId) throw new Error('Not logged in')
-  
-  const user = await prisma.user.findUnique({ where: { id: userId }})
-  if (!user || user.credits < amount) throw new Error('Insufficient bank funds')
-
-  const updatedUser = await prisma.user.update({
-    where: { id: userId },
-    data: { 
-      credits: { increment: amount }
-    }
-  })
-  
-  return stripUser(updatedUser)
-}
-
-export async function depositCredits(amount: number) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value
-  
-  if (!userId) throw new Error('Not logged in')
-  
-  const user = await prisma.user.findUnique({ where: { id: userId }})
-  if (!user || user.credits < amount) throw new Error('Insufficient credits')
-
-  const updatedUser = await prisma.user.update({
-    where: { id: userId },
-    data: { 
-      credits: { decrement: amount }
-    }
-  })
-  
-  await prisma.transaction.create({
-    data: {
-      userId: user.id,
-      type: 'WITHDRAWAL',
-      amount: amount
-    }
-  })
-  
-  return stripUser(updatedUser)
-}
+// NOTE: Fiat / bank actions (buyCoins, deposit, withdraw) were removed.
+// Credits can only be granted by an admin via updateUserBalance in admin/actions.ts.
 
 const SYMBOLS = ['🧟‍♂️', '⚡', '🧠', '🦇', '🧪', '💎']
 const MULTIPLIERS: Record<string, number> = {
@@ -193,6 +116,7 @@ export async function spinSlotMachine(betAmount: number) {
     })
     newChipBalance = updatedUser.credits
   }
+  await recordWallet(userId, totalWin - betAmount, 'ROUND', 'Slots')
   
   // Log spin
   await prisma.spin.create({

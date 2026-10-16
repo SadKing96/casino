@@ -28,7 +28,7 @@ export function UserProvider({ children, initialUser }: { children: React.ReactN
     setIsLoading(true)
     await logoutAction()
     setUser(null)
-    setIsLoading(false)
+    window.location.href = '/login'
   }
   
   const updateCredits = (credits: number) => {

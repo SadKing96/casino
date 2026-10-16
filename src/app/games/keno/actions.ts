@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { cookies } from 'next/headers'
 import { KenoBet, drawKenoNumbers, calculateKenoPayout } from './utils'
 
@@ -41,6 +42,7 @@ export async function placeBet(tableId: string, amount: number, selectedNumbers:
     where: { id: userId },
     data: { credits: { decrement: amount } }
   })
+  await recordWallet(userId, -amount, 'BET', 'Keno')
 
   const activeBets: Record<string, KenoBet> = JSON.parse(table.activeBets)
   activeBets[userId] = {
@@ -82,6 +84,7 @@ export async function drawNumbers(tableId: string) {
         where: { id: uid },
         data: { credits: { increment: profit } }
       })
+      await recordWallet(uid, profit, 'WIN', 'Keno')
     }
   }
 

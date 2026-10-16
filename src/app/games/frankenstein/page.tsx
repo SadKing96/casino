@@ -464,7 +464,8 @@ export default function FrankensteinSlot() {
         backdropFilter: 'blur(10px)',
         zIndex: 100
       }}>
-        {/* Admin Test Tools (Left side of deck) */}
+        {/* Admin Test Tools (Left side of deck) - dev only */}
+        {process.env.NODE_ENV !== 'production' && (
         <div style={{
           position: 'absolute', right: '100%', top: '0', marginRight: '20px',
           background: 'rgba(0,0,0,0.8)', padding: '16px', borderRadius: '16px',
@@ -492,6 +493,7 @@ export default function FrankensteinSlot() {
              ))}
           </div>
         </div>
+        )}
 
         {/* Audio Controls (Top Right of deck) */}
         <div style={{

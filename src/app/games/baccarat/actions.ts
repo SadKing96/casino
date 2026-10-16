@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { cookies } from 'next/headers'
 import { BaccaratBet, BaccaratBetType, createShoe, evaluateBaccaratRound } from './utils'
 
@@ -42,6 +43,7 @@ export async function placeBet(tableId: string, amount: number, type: BaccaratBe
     where: { id: userId },
     data: { credits: { decrement: amount } }
   })
+  await recordWallet(userId, -amount, 'BET', 'Baccarat')
 
   const activeBets: BaccaratBet[] = JSON.parse(table.activeBets)
   activeBets.push({ userId, type, amount })
@@ -90,6 +92,7 @@ export async function dealCards(tableId: string) {
         where: { id: bet.userId },
         data: { credits: { increment: Math.floor(payout) } }
       })
+      await recordWallet(bet.userId, Math.floor(payout), 'WIN', 'Baccarat')
       const u = await prisma.user.findUnique({ where: { id: bet.userId } })
       chatHistory.push(`[${new Date().toLocaleTimeString()}] ${u?.username} won $${Math.floor(payout - bet.amount)}!`)
     } else if (winner === 'TIE') {
@@ -99,6 +102,7 @@ export async function dealCards(tableId: string) {
             where: { id: bet.userId },
             data: { credits: { increment: bet.amount } }
           })
+          await recordWallet(bet.userId, bet.amount, 'REFUND', 'Baccarat')
           const u = await prisma.user.findUnique({ where: { id: bet.userId } })
           chatHistory.push(`[${new Date().toLocaleTimeString()}] ${u?.username} PUSH on ${bet.type}`)
        }

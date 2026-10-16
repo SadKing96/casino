@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 
 const SYMBOLS = ['🦬', '🦅', '🐺', '🦌', 'A', 'K', 'Q', 'J', '10', '9']
 
@@ -241,6 +242,7 @@ export async function spinBuffalo(betAmount: number) {
       lastSeenAt: new Date()
     }
   })
+  await recordWallet(userId, Math.floor(totalWin) - (state.isFreeSpinMode ? 0 : betAmount), 'ROUND', 'Buffalo')
 
   const updatedState = await prisma.buffaloState.update({
     where: { userId },

@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { RouletteBet, RouletteBetType, PAYOUTS, getRandomNumber, RED_NUMBERS, BLACK_NUMBERS } from './utils'
 
 export async function getActiveTables() {
@@ -43,6 +44,7 @@ export async function placeBet(tableId: string, type: RouletteBetType, amount: n
     where: { id: userId },
     data: { credits: { decrement: amount } }
   })
+  await recordWallet(userId, -amount, 'BET', 'Roulette')
 
   const newBet: RouletteBet = {
     id: `bet_${Date.now()}_${Math.random()}`,
@@ -168,6 +170,7 @@ export async function spinWheel(tableId: string) {
         where: { id: uid },
         data: { credits: { increment: amount } }
       })
+      await recordWallet(uid, amount, 'WIN', 'Roulette')
     }
   }
 

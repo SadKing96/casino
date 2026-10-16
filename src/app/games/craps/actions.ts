@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { CrapsBet, CrapsBetType, PAYOUTS, rollTwoDice } from './utils'
 
 export async function getActiveTables() {
@@ -42,6 +43,7 @@ export async function placeBet(tableId: string, type: CrapsBetType, amount: numb
     where: { id: userId },
     data: { credits: { decrement: amount } }
   })
+  await recordWallet(userId, -amount, 'BET', 'Craps')
 
   const newBet: CrapsBet = {
     id: `bet_${Date.now()}_${Math.random()}`,
@@ -223,6 +225,7 @@ export async function rollDice(tableId: string) {
         where: { id: uid },
         data: { credits: { increment: amount } }
       })
+      await recordWallet(uid, amount, 'WIN', 'Craps')
     }
   }
 

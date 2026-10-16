@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { logGameHistory } from '@/lib/admin'
 
 const SYMBOLS = ['A', 'K', 'Q', 'J', '10', '9', '🎩', '💰', '💎', '👑']
@@ -82,8 +83,8 @@ export async function spinPiggies(betAmount: number) {
 
   const globalConfig = await prisma.globalConfig.findUnique({ where: { id: 'default' } })
   const gameOdds = globalConfig?.gameOdds ? JSON.parse(globalConfig.gameOdds) : {}
-  const winMult = gameOdds['slots']?.winRate ?? 1.0
-  const freeSpinsMult = gameOdds['slots']?.freeSpinsRate ?? 1.0
+  const winMult = (gameOdds['piggies'] ?? gameOdds['slots'])?.winRate ?? 1.0
+  const freeSpinsMult = (gameOdds['piggies'] ?? gameOdds['slots'])?.freeSpinsRate ?? 1.0
 
   if (!state.isFreeSpinMode && user.credits < betAmount) {
     throw new Error("Insufficient credits")
@@ -269,6 +270,7 @@ export async function spinPiggies(betAmount: number) {
       lastSeenAt: new Date()
     }
   })
+  await recordWallet(userId, Math.floor(totalWin) - (state.isFreeSpinMode ? 0 : betAmount), 'ROUND', 'Piggies')
 
   const updatedState = await prisma.piggyState.update({
     where: { userId },

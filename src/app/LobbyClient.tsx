@@ -3,15 +3,21 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useUser } from '@/context/UserContext'
-import { withdrawCredits, depositCredits, buyCoins } from '@/app/actions'
+import { getWalletHistory, type WalletEntry } from '@/app/walletActions'
+import WalletHistoryList from '@/components/WalletHistoryList'
 import FriendsList from './FriendsList'
 
 export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: { initialLeaderboard: any[], enabledGames?: string[] }) {
-  const { user, updateCredits } = useUser()
+  const { user } = useUser()
   const [view, setView] = useState<'lobby' | 'category'>('lobby')
   const [category, setCategory] = useState('Slots')
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [chipAmount, setChipAmount] = useState(100)
+  const [walletEntries, setWalletEntries] = useState<WalletEntry[]>([])
+
+  // Refresh recent transactions whenever the balance changes
+  useEffect(() => {
+    if (!user) return
+    getWalletHistory({ take: 10 }).then(r => setWalletEntries(r.entries)).catch(() => {})
+  }, [user?.credits])
   
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -23,42 +29,6 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
       }
     }
   }, [])
-  
-  const handleWithdraw = async () => {
-    if (!user) return
-    setIsProcessing(true)
-    try {
-      const updatedUser = await withdrawCredits(chipAmount)
-      updateCredits(updatedUser!.credits)
-    } catch (e) {
-      console.error(e)
-    }
-    setIsProcessing(false)
-  }
-
-  const handleDeposit = async () => {
-    if (!user) return
-    setIsProcessing(true)
-    try {
-      const updatedUser = await depositCredits(chipAmount)
-      updateCredits(updatedUser!.credits)
-    } catch (e) {
-      console.error(e)
-    }
-    setIsProcessing(false)
-  }
-
-  const handleBuyCoins = async () => {
-    if (!user) return
-    setIsProcessing(true)
-    try {
-      const updatedUser = await buyCoins(1000)
-      updateCredits(updatedUser!.credits)
-    } catch (e) {
-      console.error(e)
-    }
-    setIsProcessing(false)
-  }
 
   return (
     <div className="lobby-grid">
@@ -179,7 +149,7 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignContent: 'flex-start', justifyContent: 'center' }}>
-              {category === 'Slots' && enabledGames.includes('slots') && (
+              {category === 'Slots' && enabledGames.includes('frankenstein') && (
                 <Link href={user ? "/games/frankenstein" : "/login"} style={{ textDecoration: 'none' }}>
                   <div className="glass-panel game-card" style={{ 
                     width: '240px', height: '300px', display: 'flex', flexDirection: 'column',
@@ -201,7 +171,7 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
                 </Link>
               )}
 
-              {category === 'Slots' && enabledGames.includes('slots') && (
+              {category === 'Slots' && enabledGames.includes('piggies') && (
                 <Link href={user ? "/games/piggies" : "/login"} style={{ textDecoration: 'none' }}>
                   <div className="glass-panel game-card" style={{ 
                     width: '240px', height: '300px', display: 'flex', flexDirection: 'column',
@@ -223,7 +193,7 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
                 </Link>
               )}
 
-              {category === 'Slots' && enabledGames.includes('slots') && (
+              {category === 'Slots' && enabledGames.includes('buffalo') && (
                 <Link href={user ? "/games/buffalo" : "/login"} style={{ textDecoration: 'none' }}>
                   <div className="glass-panel game-card" style={{ 
                     width: '240px', height: '300px', display: 'flex', flexDirection: 'column',
@@ -458,16 +428,11 @@ export default function LobbyClient({ initialLeaderboard, enabledGames = [] }: {
                   <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'var(--neon-gold)' }}>${user.credits.toLocaleString()}</div>
                 </div>
 
-                <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '12px 0' }} />
-                
-                <button 
-                  className="btn-primary" 
-                  disabled={isProcessing}
-                  onClick={handleBuyCoins}
-                  style={{ width: '100%', padding: '10px', background: 'linear-gradient(135deg, #00ffcc 0%, #00cc99 100%)', color: '#000', fontWeight: 'bold' }}
-                >
-                  Buy $1,000 Coins
-                </button>
+                <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '12px 0 8px' }} />
+
+                <div style={{ fontSize: '0.75rem', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Recent Transactions</div>
+                <WalletHistoryList entries={walletEntries} />
+                <Link href="/wallet" id="wallet-view-all" className="wallet-viewall">View All Transactions →</Link>
               </>
             ) : (
               <div style={{ textAlign: 'center', opacity: 0.7, marginTop: '40px' }}>

@@ -24,7 +24,6 @@ export default function AdminDashboard() {
   const [houseBankAmount, setHouseBankAmount] = useState<number>(0)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editChips, setEditChips] = useState(0)
-  const [editBank, setEditBank] = useState(0)
 
   // Create User State
   const [showCreate, setShowCreate] = useState(false)
@@ -33,8 +32,7 @@ export default function AdminDashboard() {
     password: '',
     requiresPasswordReset: false,
     role: 'PLAYER',
-    chipBalance: 0,
-    bankBalance: 1000
+    chipBalance: 0
   })
 
   useEffect(() => {
@@ -88,7 +86,7 @@ export default function AdminDashboard() {
     if (!newUserData.username) return
     await createUser(newUserData)
     setShowCreate(false)
-    setNewUserData({ username: '', password: '', requiresPasswordReset: false, role: 'PLAYER', chipBalance: 0, bankBalance: 1000 })
+    setNewUserData({ username: '', password: '', requiresPasswordReset: false, role: 'PLAYER', chipBalance: 0 })
     loadData()
   }
 
@@ -99,17 +97,22 @@ export default function AdminDashboard() {
     }
   }
 
-  const GAMES_LIST = [
-    { id: 'slots', name: 'Piggy Slots' },
-    { id: 'blackjack', name: 'Blackjack' },
-    { id: 'roulette', name: 'Roulette' },
-    { id: 'baccarat', name: 'Baccarat' },
-    { id: 'threecardpoker', name: 'Three Card Poker' },
-    { id: 'crash', name: 'Crash' },
-    { id: 'keno', name: 'Keno' },
-    { id: 'craps', name: 'Craps' },
-    { id: 'holdem', name: 'Texas Holdem' },
-    { id: 'sportsbook', name: 'Sportsbook' }
+  // `odds` lists the controls each game's server code actually reads from gameOdds.
+  // Games with no odds hooks only get the enable/disable toggle.
+  type OddsControl = 'win' | 'freeSpins'
+  const GAMES_LIST: { id: string, name: string, category: string, odds: OddsControl[] }[] = [
+    { id: 'frankenstein', name: 'Frankenstein', category: 'Slots', odds: ['win', 'freeSpins'] },
+    { id: 'piggies', name: 'Piggies', category: 'Slots', odds: ['win', 'freeSpins'] },
+    { id: 'buffalo', name: 'Buffalo', category: 'Slots', odds: [] },
+    { id: 'blackjack', name: 'Blackjack', category: 'Table Games', odds: [] },
+    { id: 'holdem', name: "Texas Hold'em", category: 'Table Games', odds: [] },
+    { id: 'craps', name: 'Craps', category: 'Table Games', odds: [] },
+    { id: 'roulette', name: 'Roulette', category: 'Table Games', odds: [] },
+    { id: 'baccarat', name: 'Baccarat', category: 'Table Games', odds: [] },
+    { id: 'threecardpoker', name: 'Three Card Poker', category: 'Table Games', odds: [] },
+    { id: 'crash', name: 'Crash', category: 'Arcade', odds: [] },
+    { id: 'keno', name: 'Keno', category: 'Arcade', odds: [] },
+    { id: 'sportsbook', name: 'Sportsbook', category: 'Sports', odds: [] }
   ]
 
   return (
@@ -174,12 +177,8 @@ export default function AdminDashboard() {
                     </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label>Init Chips</label>
-                    <input type="number" value={newUserData.chipBalance} onChange={e => setNewUserData({...newUserData, chipBalance: Number(e.target.value)})} style={{ padding: '8px', borderRadius: '4px', border: 'none', background: '#222', color: '#fff', width: '80px' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <label>Init Bank ($)</label>
-                    <input type="number" value={newUserData.bankBalance} onChange={e => setNewUserData({...newUserData, bankBalance: Number(e.target.value)})} style={{ padding: '8px', borderRadius: '4px', border: 'none', background: '#222', color: '#fff', width: '80px' }} />
+                    <label>Starting Wallet</label>
+                    <input type="number" value={newUserData.chipBalance} onChange={e => setNewUserData({...newUserData, chipBalance: Number(e.target.value)})} style={{ padding: '8px', borderRadius: '4px', border: 'none', background: '#222', color: '#fff', width: '100px' }} />
                   </div>
                   <button type="submit" className="btn-primary" style={{ padding: '8px 20px', height: 'fit-content' }}>Create</button>
                 </form>
@@ -191,8 +190,7 @@ export default function AdminDashboard() {
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.2)', textAlign: 'left' }}>
                   <th style={{ padding: '10px' }}>ID / Username</th>
                   <th style={{ padding: '10px' }}>Role</th>
-                  <th style={{ padding: '10px' }}>Chips</th>
-                  <th style={{ padding: '10px' }}>Bank (USD)</th>
+                  <th style={{ padding: '10px' }}>Wallet</th>
                   <th style={{ padding: '10px' }}>Actions</th>
                 </tr>
               </thead>
@@ -210,14 +208,7 @@ export default function AdminDashboard() {
                       {editingUserId === u.id ? (
                         <input type="number" value={editChips} onChange={e => setEditChips(Number(e.target.value))} style={{ width: '80px', background: '#333', color: '#fff', border: 'none', padding: '5px' }} />
                       ) : (
-                        `$${u.chipBalance}`
-                      )}
-                    </td>
-                    <td style={{ padding: '10px' }}>
-                      {editingUserId === u.id ? (
-                        <input type="number" value={editBank} onChange={e => setEditBank(Number(e.target.value))} style={{ width: '80px', background: '#333', color: '#fff', border: 'none', padding: '5px' }} />
-                      ) : (
-                        `$${u.bankBalance}`
+                        `$${(u.credits ?? 0).toLocaleString()}`
                       )}
                     </td>
                     <td style={{ padding: '10px', display: 'flex', gap: '10px' }}>
@@ -229,7 +220,7 @@ export default function AdminDashboard() {
                       ) : (
                         <>
                           <button 
-                            onClick={() => { setEditingUserId(u.id); setEditChips(u.chipBalance); setEditBank(u.bankBalance); }} 
+                            onClick={() => { setEditingUserId(u.id); setEditChips(u.credits ?? 0); }} 
                             className="btn-secondary" style={{ padding: '5px 10px', fontSize: '0.8rem' }}
                           >
                             Edit
@@ -400,38 +391,40 @@ export default function AdminDashboard() {
                     </div>
 
                     <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.1)' }} />
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Win Multiplier:</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
-                          {(oddsEdits[game.id]?.winRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.winRate ?? 1.0)).toFixed(1)}x
-                        </div>
-                      </div>
-                      <input 
-                        type="range" step="0.1" min="0.1" max="3.0"
-                        value={oddsEdits[game.id]?.winRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.winRate ?? 1.0)} 
-                        onChange={e => setOddsEdits(prev => ({ ...prev, [game.id]: { ...prev[game.id], winRate: parseFloat(e.target.value) } }))}
-                        onMouseUp={() => updateGameOdds(game.id, oddsEdits[game.id]?.winRate ?? 1.0, oddsEdits[game.id]?.freeSpinsRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.freeSpinsRate ?? 1.0))}
-                        style={{ width: '100%', accentColor: '#ffcc00', cursor: 'pointer' }}
-                      />
-                    </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Free Spins Multiplier:</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
-                          {(oddsEdits[game.id]?.freeSpinsRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.freeSpinsRate ?? 1.0)).toFixed(1)}x
+                    {(() => {
+                      const stored = JSON.parse(config.gameOdds || '{}')
+                      const saved = stored[game.id] ?? (game.category === 'Slots' ? stored.slots : undefined) ?? {}
+                      const win = oddsEdits[game.id]?.winRate ?? saved.winRate ?? 1.0
+                      const fs = oddsEdits[game.id]?.freeSpinsRate ?? saved.freeSpinsRate ?? 1.0
+                      const commit = () => updateGameOdds(game.id, win, fs)
+
+                      if (game.odds.length === 0) {
+                        return <div style={{ fontSize: '0.8rem', opacity: 0.5 }}>No adjustable odds for this game.</div>
+                      }
+
+                      const sliders: { key: 'winRate' | 'freeSpinsRate', label: string, value: number, color: string }[] = []
+                      if (game.odds.includes('win')) sliders.push({ key: 'winRate', label: 'Win Multiplier', value: win, color: '#ffcc00' })
+                      if (game.odds.includes('freeSpins')) sliders.push({ key: 'freeSpinsRate', label: 'Free Spins Multiplier', value: fs, color: '#00cc66' })
+
+                      return sliders.map(s => (
+                        <div key={s.key} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label htmlFor={`odds-${game.id}-${s.key}`} style={{ fontSize: '0.8rem', opacity: 0.8 }}>{s.label}:</label>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{s.value.toFixed(1)}x</div>
+                          </div>
+                          <input
+                            id={`odds-${game.id}-${s.key}`}
+                            type="range" step="0.1" min="0.1" max="3.0"
+                            value={s.value}
+                            onChange={e => setOddsEdits(prev => ({ ...prev, [game.id]: { ...prev[game.id], [s.key]: parseFloat(e.target.value) } }))}
+                            onPointerUp={commit}
+                            onKeyUp={commit}
+                            style={{ width: '100%', accentColor: s.color, cursor: 'pointer' }}
+                          />
                         </div>
-                      </div>
-                      <input 
-                        type="range" step="0.1" min="0.1" max="3.0"
-                        value={oddsEdits[game.id]?.freeSpinsRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.freeSpinsRate ?? 1.0)} 
-                        onChange={e => setOddsEdits(prev => ({ ...prev, [game.id]: { ...prev[game.id], freeSpinsRate: parseFloat(e.target.value) } }))}
-                        onMouseUp={() => updateGameOdds(game.id, oddsEdits[game.id]?.winRate ?? (JSON.parse(config.gameOdds || '{}')[game.id]?.winRate ?? 1.0), oddsEdits[game.id]?.freeSpinsRate ?? 1.0)}
-                        style={{ width: '100%', accentColor: '#00cc66', cursor: 'pointer' }}
-                      />
-                    </div>
+                      ))
+                    })()}
                   </div>
                 )
               })}

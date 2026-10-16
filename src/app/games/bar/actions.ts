@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { cookies } from 'next/headers'
 import { logGameHistory } from '@/lib/admin'
 
@@ -15,6 +16,7 @@ export async function submitBarShift(tipsEarned: number, customersServed: number
     where: { id: userId },
     data: { credits: { increment: tipsEarned } }
   })
+  await recordWallet(userId, tipsEarned, 'ROUND', 'Casino Bar')
 
   await logGameHistory({
     userId,

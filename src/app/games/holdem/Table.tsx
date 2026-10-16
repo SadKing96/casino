@@ -1,5 +1,5 @@
 import { useUser } from '@/context/UserContext'
-import { getTableState, dealHand, playerAction, chatWithDealer } from './actions'
+import { getTableState, dealHand, playerAction } from './actions'
 import { Card, PlayerState, evaluateBestHand } from './utils'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
@@ -12,9 +12,7 @@ export default function HoldemTable({ tableId, onLeave }: { tableId: string, onL
   const [isProcessing, setIsProcessing] = useState(false)
   const [raiseAmount, setRaiseAmount] = useState(50)
   
-  const [chatMessage, setChatMessage] = useState('')
   const [chatHistory, setChatHistory] = useState<{sender: string, text: string}[]>([])
-  const [isTyping, setIsTyping] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   const [chipHistory, setChipHistory] = useState<{amount: number, type: string, id: number}[]>([])
@@ -54,7 +52,7 @@ export default function HoldemTable({ tableId, onLeave }: { tableId: string, onL
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
     }
-  }, [chatHistory, isTyping])
+  }, [chatHistory])
 
   const notifyOthers = async () => {
     const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001')
@@ -81,26 +79,9 @@ export default function HoldemTable({ tableId, onLeave }: { tableId: string, onL
       }
     } catch (e: any) {
       console.error(e)
-      setChatHistory(prev => [...prev, { sender: 'Rusty', text: e.message || "Can't do that." }])
+      setChatHistory(prev => [...prev, { sender: 'System', text: e.message || "Can't do that." }])
     }
     setIsProcessing(false)
-  }
-
-  const handleChatSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!chatMessage.trim() || isTyping) return
-    
-    const msg = chatMessage
-    setChatMessage('')
-    setIsTyping(true)
-    
-    setChatHistory(prev => [...prev, { sender: user?.username || 'You', text: msg }])
-    
-    let context = `Status: ${gameState?.status}. Pot: ${gameState?.potAmount}. `
-
-    const reply = await chatWithDealer(msg, context)
-    setChatHistory(prev => [...prev, { sender: 'Rusty', text: reply }])
-    setIsTyping(false)
   }
 
   if (errorMsg) return <div style={{ textAlign: 'center', marginTop: '100px', color: 'red' }}>Error: {errorMsg}</div>
@@ -358,45 +339,17 @@ export default function HoldemTable({ tableId, onLeave }: { tableId: string, onL
         <div style={{ fontSize: '2rem', color: '#fff', textShadow: '0 0 10px rgba(212,175,55,0.5)', fontWeight: 'bold' }}>${user?.credits.toLocaleString()}</div>
       </div>
 
-      {/* FLOATING CHAT (TOP LEFT) */}
+      {/* GAME LOG (TOP LEFT) */}
       <div style={{ position: 'absolute', top: '80px', left: '20px', width: '320px', height: '260px', display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.8)', borderRadius: '16px', border: '1px solid rgba(212, 175, 55, 0.5)', boxShadow: '0 10px 30px rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', zIndex: 100, overflow: 'hidden' }}>
         <div style={{ padding: '8px 12px', background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, transparent 100%)', borderBottom: '1px solid rgba(212, 175, 55, 0.3)', fontWeight: 'bold', color: '#d4af37', fontSize: '0.9rem' }}>
-          TABLE CHAT
+          GAME LOG
         </div>
         
         <div ref={chatScrollRef} style={{ flex: 1, padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {chatHistory.map((msg, i) => {
-            const isDealer = msg.sender === 'Rusty'
-            return (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: isDealer ? 'flex-start' : 'flex-end' }}>
-                <span style={{ fontSize: '0.8rem', color: isDealer ? '#d4af37' : '#aaa', marginBottom: '2px', fontWeight: 'bold' }}>{msg.sender}</span>
-                <div style={{ background: isDealer ? 'rgba(212, 175, 55, 0.1)' : 'rgba(255,255,255,0.1)', border: isDealer ? '1px solid rgba(212, 175, 55, 0.3)' : '1px solid rgba(255,255,255,0.2)', padding: '8px 12px', borderRadius: '12px', borderBottomLeftRadius: isDealer ? 0 : '12px', borderBottomRightRadius: isDealer ? '12px' : 0, color: '#fff', fontSize: '0.9rem', maxWidth: '90%' }}>
-                  {msg.text}
-                </div>
-              </div>
-            )
-          })}
-          {isTyping && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '0.8rem', color: '#d4af37', marginBottom: '2px', fontWeight: 'bold' }}>Rusty</span>
-              <div style={{ background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.3)', padding: '8px 12px', borderRadius: '12px', borderBottomLeftRadius: 0, color: '#fff', fontSize: '0.9rem' }}>
-                <span className="typing-dots">...</span>
-              </div>
-            </div>
-          )}
+          {chatHistory.map((msg, i) => (
+            <div key={i} style={{ color: msg.sender === 'System' ? '#ff8899' : '#fff', fontSize: '0.85rem' }}>{msg.text}</div>
+          ))}
         </div>
-
-        <form onSubmit={handleChatSubmit} style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.1)', padding: '8px' }}>
-          <input 
-            type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)}
-            placeholder="Message..."
-            style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '6px', outline: 'none', padding: '6px 10px', fontSize: '0.9rem' }}
-            disabled={isTyping}
-          />
-          <button type="submit" style={{ background: 'linear-gradient(135deg, #f2a900 0%, #d48e00 100%)', color: '#000', border: 'none', borderRadius: '6px', padding: '6px 12px', fontWeight: 'bold', fontSize: '0.85rem', cursor: isTyping ? 'not-allowed' : 'pointer', opacity: isTyping ? 0.5 : 1, marginLeft: '6px' }} disabled={isTyping}>
-            SEND
-          </button>
-        </form>
       </div>
 
     </div>

@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { revalidatePath } from 'next/cache'
 
 export async function placeBet(eventId: string, sportKey: string, team: string, odds: number, amount: number) {
@@ -36,6 +37,7 @@ export async function placeBet(eventId: string, sportKey: string, team: string, 
       }
     })
   ])
+  await recordWallet(userId, -amount, 'BET', 'Sportsbook')
 
   revalidatePath('/games/sportsbook')
   revalidatePath('/admin')

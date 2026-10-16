@@ -23,6 +23,7 @@ model User {
   role      String   @default("PLAYER") // ADMIN, BANNED, PLAYER
   transactions Transaction[]
   gameHistory  GameHistory[]
+  walletTransactions WalletTransaction[]
   friends      Friendship[] @relation("UserFriends")
   friendOf     Friendship[] @relation("FriendUsers")
 }
@@ -241,4 +242,19 @@ model SportsBet {
   status             String   @default("PENDING") // PENDING, WON, LOST
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+// Unified wallet ledger. One row per round (net) for instant games,
+// or separate BET / WIN rows for games that settle later.
+model WalletTransaction {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String   // ROUND | BET | WIN | REFUND | ADMIN_ADJUST
+  game         String?  // display name e.g. "Frankenstein"
+  amount       Int      // signed net change to wallet
+  balanceAfter Int
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

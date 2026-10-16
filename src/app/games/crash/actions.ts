@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { cookies } from 'next/headers'
 import { CrashBet, generateCrashPoint, calculateMultiplier, calculateTimeMsForMultiplier } from './utils'
 
@@ -42,6 +43,7 @@ export async function placeBet(tableId: string, amount: number) {
     where: { id: userId },
     data: { credits: { decrement: amount } }
   })
+  await recordWallet(userId, -amount, 'BET', 'Crash')
 
   const activeBets: Record<string, CrashBet> = JSON.parse(table.activeBets)
   activeBets[userId] = {
@@ -121,6 +123,7 @@ export async function cashOut(tableId: string) {
     where: { id: userId },
     data: { credits: { increment: profit } }
   })
+  await recordWallet(userId, profit, 'WIN', 'Crash')
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
   const chatHistory = JSON.parse(table.chatHistory)

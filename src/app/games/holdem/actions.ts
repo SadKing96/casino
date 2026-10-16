@@ -2,11 +2,10 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { generateDeck, Card, PlayerState, evaluateBestHand } from './utils'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import * as PokerSolver from 'pokersolver'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
 export async function getActiveTables() {
   return await prisma.holdemTable.findMany({
@@ -138,12 +137,14 @@ export async function dealHand(tableId: string) {
   players[sbIndex].currentBet = BLIND_SMALL
   if (!players[sbIndex].isBot) {
     await prisma.user.update({ where: { id: players[sbIndex].id }, data: { credits: { decrement: BLIND_SMALL } } })
+    await recordWallet(players[sbIndex].id, -BLIND_SMALL, 'BET', "Texas Hold'em")
   }
 
   players[bbIndex].chips -= BLIND_BIG
   players[bbIndex].currentBet = BLIND_BIG
   if (!players[bbIndex].isBot) {
     await prisma.user.update({ where: { id: players[bbIndex].id }, data: { credits: { decrement: BLIND_BIG } } })
+    await recordWallet(players[bbIndex].id, -BLIND_BIG, 'BET', "Texas Hold'em")
   }
 
   const pot = BLIND_SMALL + BLIND_BIG
@@ -304,6 +305,7 @@ async function resolveShowdown(tableId: string, players: PlayerState[], communit
   winner.chips += pot
   if (!winner.isBot) {
     await prisma.user.update({ where: { id: winner.id }, data: { credits: { increment: pot } } })
+    await recordWallet(winner.id, pot, 'WIN', "Texas Hold'em")
   }
 
   const finalState = await prisma.holdemTable.update({
@@ -347,6 +349,7 @@ export async function playerAction(tableId: string, action: 'FOLD' | 'CALL' | 'R
     pot += callAmt
     if (human.chips === 0) human.status = 'ALL_IN'
     await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: callAmt } } })
+    await recordWallet(userId, -callAmt, 'BET', "Texas Hold'em")
   } else if (action === 'RAISE') {
     human.hasActed = true
     const raiseAmt = amount || (currentBet + 20)
@@ -363,6 +366,7 @@ export async function playerAction(tableId: string, action: 'FOLD' | 'CALL' | 'R
     players.forEach(p => { if (p.id !== human.id && p.status !== 'FOLDED' && p.status !== 'ALL_IN') p.hasActed = false })
     
     await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: totalDeduct } } })
+    await recordWallet(userId, -totalDeduct, 'BET', "Texas Hold'em")
   }
 
   turnIndex = (turnIndex + 1) % players.length
@@ -393,18 +397,3 @@ export async function playerAction(tableId: string, action: 'FOLD' | 'CALL' | 'R
   return await processAiTurns(state, userId)
 }
 
-export async function chatWithDealer(message: string, gameContext: string) {
-  try {
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: "You are Rusty, a rage-baiting, obnoxious, slightly aggressive Texas Hold'em casino dealer."
-    })
-    const prompt = `Game Context right now: ${gameContext}\nThe player says: "${message}"\nRespond to the player in character as Rusty. Keep it very short, 1-2 sentences maximum. Be insulting but professional.`
-    
-    const result = await model.generateContent(prompt)
-    return result.response.text() || "Yeah, whatever."
-  } catch (error) {
-    console.error("Gemini Error:", error)
-    return "I'm not talkin' right now."
-  }
-}

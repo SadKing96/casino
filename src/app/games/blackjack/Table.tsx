@@ -1,7 +1,7 @@
 'use client'
 
 import { useUser } from '@/context/UserContext'
-import { getTableState, joinTable, leaveTable, placeBet, checkAutoDeal, hit, stand, doubleDown, split, surrender, buyInsurance, resolveInsurance, nextRound, chatWithDealer, PlayerState, Hand } from './actions'
+import { getTableState, joinTable, leaveTable, placeBet, checkAutoDeal, hit, stand, doubleDown, split, surrender, buyInsurance, resolveInsurance, nextRound, PlayerState, Hand } from './actions'
 import { Card, calculateScore, calculateScoreString } from './utils'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -23,7 +23,6 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
   const [displayedDealerCount, setDisplayedDealerCount] = useState(2)
 
   // Chat State
-  const [chatMessage, setChatMessage] = useState('')
   const [chatHistory, setChatHistory] = useState<string[]>([])
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
@@ -128,19 +127,6 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
     setIsProcessing(false)
   }
 
-  const handleChatSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!chatMessage.trim()) return
-    const msg = chatMessage
-    setChatMessage('')
-    
-    setChatHistory(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${user?.username}: ${msg}`])
-    
-    await chatWithDealer(tableId, msg)
-    socketRef.current?.emit('action_taken', `blackjack_${tableId}`)
-    loadTable()
-  }
-
   const handleLeave = async () => {
     await leaveTable(tableId)
     socketRef.current?.emit('action_taken', `blackjack_${tableId}`)
@@ -181,6 +167,18 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
     if (activeHand) activeHandId = activeHand.id
   }
 
+  // Round outcome (only once the dealer has finished revealing cards)
+  const dealerDoneRevealing = isResolved && displayedDealerCount >= dealerHand.length
+  const handOutcome = (h: Hand): 'WIN' | 'PUSH' | 'LOSE' | 'SURRENDER' =>
+    h.status === 'SURRENDER' ? 'SURRENDER' : h.payout > h.bet ? 'WIN' : h.payout === h.bet && h.bet > 0 ? 'PUSH' : 'LOSE'
+  const myHands: Hand[] = myState?.hands ?? []
+  const myNet = myHands.reduce((acc, h) => acc + h.payout - h.bet, 0)
+  const myResult: 'WIN' | 'PUSH' | 'LOSE' | null =
+    dealerDoneRevealing && myHands.length > 0 && myState?.status !== 'SKIPPED'
+      ? (myNet > 0 ? 'WIN' : myNet === 0 ? 'PUSH' : 'LOSE')
+      : null
+  const anyBust = myHands.some(h => h.status === 'BUST')
+
   return (
     <div style={{ 
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -201,7 +199,21 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
         <div style={{ color: '#00ffcc', fontSize: '1.2rem', fontWeight: 'bold' }}>Credits: ${user?.credits.toLocaleString()}</div>
       </div>
 
-      {/* DEALER PIT */}
+      {/* LOSS FLASH: red vignette pulse across the table */}
+      <AnimatePresence>
+        {myResult === 'LOSE' && (
+          <motion.div
+            key="loss-flash"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.9, 0.35] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.9, ease: 'easeOut' }}
+            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4, borderRadius: '20px',
+              background: 'radial-gradient(ellipse at center, transparent 35%, rgba(200, 0, 30, 0.55) 100%)',
+              boxShadow: 'inset 0 0 80px rgba(255, 30, 60, 0.6)' }}
+          />
+        )}
+      </AnimatePresence>
       <div style={{
         position: 'absolute', top: '-150px', left: '50%', transform: 'translateX(-50%)',
         width: '800px', height: '400px', background: 'radial-gradient(circle at 50% 0%, #111 0%, #000 100%)', 
@@ -294,19 +306,48 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
             ))}
           </AnimatePresence>
         </div>
-        {isResolved && myState && myState.hands.some((h: any) => h.payout > 0) && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.5, y: -20 }}
-            animate={{ opacity: [0, 1, 0, 1, 1], scale: [1, 1.2, 1, 1.2, 1], y: 0 }}
-            transition={{ duration: 1.5 }}
-            style={{ 
-              marginTop: '15px', color: '#00ffaa', fontWeight: '900', fontSize: '3rem', 
-              textShadow: '0 0 20px #00ffaa', textTransform: 'uppercase', letterSpacing: '8px' 
-            }}
-          >
-            WINNER
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {myResult === 'WIN' && (
+            <motion.div
+              key="win"
+              initial={{ opacity: 0, scale: 0.5, y: -20 }}
+              animate={{ opacity: [0, 1, 0, 1, 1], scale: [1, 1.2, 1, 1.2, 1], y: 0 }}
+              transition={{ duration: 1.5 }}
+              style={{ marginTop: '15px', color: '#00ffaa', fontWeight: '900', fontSize: '3rem', textShadow: '0 0 20px #00ffaa', textTransform: 'uppercase', letterSpacing: '8px', textAlign: 'center' }}
+            >
+              WINNER
+              <div style={{ fontSize: '1.4rem', letterSpacing: '2px' }}>+${myNet.toLocaleString()}</div>
+            </motion.div>
+          )}
+          {myResult === 'PUSH' && (
+            <motion.div
+              key="push"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4 }}
+              style={{ marginTop: '15px', color: '#e0e0e0', fontWeight: '900', fontSize: '2.6rem', textShadow: '0 0 16px rgba(255,255,255,0.5)', letterSpacing: '8px', textAlign: 'center' }}
+            >
+              PUSH
+              <div style={{ fontSize: '1rem', letterSpacing: '2px', opacity: 0.8 }}>Bet returned</div>
+            </motion.div>
+          )}
+          {myResult === 'LOSE' && (
+            <motion.div
+              key="lose"
+              initial={{ opacity: 0, scale: 1.6 }}
+              animate={{ opacity: 1, scale: 1, x: [0, -14, 14, -10, 10, -5, 5, 0] }}
+              transition={{ duration: 0.6, ease: 'easeOut' }}
+              style={{ marginTop: '15px', padding: '8px 28px', borderRadius: '14px', textAlign: 'center',
+                background: 'rgba(40, 0, 8, 0.85)', border: '2px solid #ff3355',
+                boxShadow: '0 0 30px rgba(255, 30, 60, 0.6)' }}
+            >
+              <div style={{ color: '#ff3355', fontWeight: '900', fontSize: '2.8rem', letterSpacing: '6px', textShadow: '0 0 18px #ff1a40', lineHeight: 1.1 }}>
+                {anyBust && myHands.every(h => h.status === 'BUST') ? 'BUST' : 'DEALER WINS'}
+              </div>
+              <div style={{ color: '#ff8899', fontWeight: 700, fontSize: '1.3rem', letterSpacing: '2px' }}>−${Math.abs(myNet).toLocaleString()}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* 5 PLAYER SEATS */}
@@ -359,10 +400,11 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
                             key={ci} initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                             style={{
                               width: '70px', height: '100px', borderRadius: '8px', background: '#fff', border: '1px solid #000',
-                              boxShadow: isActiveHand ? '0 0 15px #00ffcc' : '2px 5px 10px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              boxShadow: isActiveHand ? '0 0 15px #00ffcc' : (dealerDoneRevealing && handOutcome(hand) === 'LOSE') ? '0 0 14px rgba(255,40,70,0.9)' : '2px 5px 10px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              filter: dealerDoneRevealing && handOutcome(hand) === 'LOSE' ? 'grayscale(0.6) brightness(0.75)' : 'none',
                               flexDirection: 'column', color: ['♥️','♦️'].includes(card.suit) ? '#d00' : '#000',
                               marginLeft: ci === 0 ? 0 : '-40px',
-                              marginTop: ci === 0 ? 0 : `${ci * 20}px`,
+                              marginTop: ci === 0 ? 0 : `${ci * 12}px`,
                               zIndex: ci,
                               transform: hand.doubleDown && ci === 2 ? 'rotate(90deg) translateY(-20px)' : 'none'
                             }}
@@ -374,32 +416,52 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
                       </div>
 
                       {/* Status Badges */}
-                      {hand.status === 'BLACKJACK' && <div style={{ position: 'absolute', bottom: '-20px', color: '#ffcc00', fontWeight: 'bold', textShadow: '0 0 5px #000', background: 'rgba(0,0,0,0.5)', padding: '2px 4px', borderRadius: '4px' }}>BLACKJACK!</div>}
-                      {hand.status === 'BUST' && <div style={{ position: 'absolute', bottom: '-20px', color: '#ff3333', fontWeight: 'bold', textShadow: '0 0 5px #000', background: 'rgba(0,0,0,0.5)', padding: '2px 4px', borderRadius: '4px' }}>BUST</div>}
-                      {hand.status === 'SURRENDER' && <div style={{ position: 'absolute', bottom: '-20px', color: '#aaa', fontWeight: 'bold', textShadow: '0 0 5px #000', background: 'rgba(0,0,0,0.5)', padding: '2px 4px', borderRadius: '4px' }}>SURRENDER</div>}
-                      {isResolved && hand.payout > 0 && (
-                        <motion.div 
-                          initial={{ scale: 0, y: 20 }} 
-                          animate={{ scale: [1, 1.2, 1], y: 0 }} 
-                          transition={{ duration: 0.5, ease: "easeOut" }}
-                          style={{ 
-                            position: 'absolute', bottom: '-50px', 
-                            color: '#00ffaa', fontWeight: '900', fontSize: '2rem',
-                            textShadow: '0 0 15px #00ffaa, 0 0 30px #00ffaa',
-                            zIndex: 100,
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          +${hand.payout}
-                        </motion.div>
-                      )}
+                      {(['BLACKJACK', 'BUST', 'SURRENDER'] as const).includes(hand.status as any) && (() => {
+                        const s = hand.status === 'BLACKJACK'
+                          ? { text: 'BLACKJACK!', color: '#ffcc00', border: '#ffcc00', glow: 'rgba(255,204,0,0.6)' }
+                          : hand.status === 'BUST'
+                            ? { text: 'BUST', color: '#ff3355', border: '#ff3355', glow: 'rgba(255,30,60,0.7)' }
+                            : { text: 'SURRENDER', color: '#ccc', border: '#888', glow: 'rgba(0,0,0,0.6)' }
+                        return (
+                          <motion.div
+                            initial={{ scale: 0.4, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                            style={{ position: 'absolute', bottom: '-28px', zIndex: 60, whiteSpace: 'nowrap',
+                              color: s.color, fontWeight: 900, fontSize: '1.5rem', letterSpacing: '3px',
+                              background: 'rgba(0,0,0,0.85)', border: `2px solid ${s.border}`, borderRadius: '10px',
+                              padding: '2px 14px', textShadow: `0 0 10px ${s.glow}`, boxShadow: `0 0 18px ${s.glow}` }}
+                          >
+                            {s.text}
+                          </motion.div>
+                        )
+                      })()}
+                      {dealerDoneRevealing && (() => {
+                        const o = handOutcome(hand)
+                        if (o === 'SURRENDER') return null
+                        const cfg = o === 'WIN'
+                          ? { text: `+$${hand.payout - hand.bet}`, color: '#00ffaa', glow: '0 0 15px #00ffaa, 0 0 30px #00ffaa' }
+                          : o === 'PUSH'
+                            ? { text: 'PUSH', color: '#e0e0e0', glow: '0 0 10px rgba(255,255,255,0.6)' }
+                            : { text: `−$${hand.bet}`, color: '#ff3355', glow: '0 0 15px #ff1a40' }
+                        return (
+                          <motion.div
+                            initial={{ scale: 0, y: 20 }}
+                            animate={{ scale: [1, 1.2, 1], y: 0 }}
+                            transition={{ duration: 0.5, ease: 'easeOut' }}
+                            style={{ position: 'absolute', bottom: ['BLACKJACK', 'BUST'].includes(hand.status) ? '-78px' : '-50px', color: cfg.color, fontWeight: '900', fontSize: '2rem', textShadow: cfg.glow, zIndex: 100, whiteSpace: 'nowrap' }}
+                          >
+                            {cfg.text}
+                          </motion.div>
+                        )
+                      })()}
                     </div>
                   )
                 })}
               </div>
               
               {/* Betting Circle */}
-              <div style={{ position: 'relative', marginTop: '40px' }}>
+              <div style={{ position: 'relative', marginTop: '90px' }}>
                 <div style={{ 
                   width: '80px', height: '80px', borderRadius: '50%', pointerEvents: 'none', 
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
@@ -440,8 +502,8 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
         })}
       </div>
 
-      {/* CONTROLS */}
-      <div style={{ position: 'absolute', bottom: '120px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: '16px', zIndex: 10, alignItems: 'center' }}>
+      {/* CONTROLS - docked bottom-left so they never cover the seats (chat mirrors on the right) */}
+      <div style={{ position: 'absolute', bottom: '40px', left: '40px', maxWidth: 'calc(100% - 440px)', display: 'flex', flexDirection: 'column', gap: '16px', zIndex: 100, alignItems: 'flex-start' }}>
         
         {isBetting && myState && myState.status === 'SITTING' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(0,0,0,0.8)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(212,175,55,0.5)', backdropFilter: 'blur(5px)' }}>
@@ -469,7 +531,7 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
               ))}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-start', flexWrap: 'wrap' }}>
               <div style={{ color: '#d4af37', fontWeight: 'bold' }}>MAIN BET:</div>
               {[10, 50, 100, 500].map(amt => (
                 <button 
@@ -560,7 +622,7 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
       {/* CHAT WINDOW */}
       <div style={{ position: 'absolute', bottom: '40px', right: '40px', width: '320px', height: '320px', display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.8)', borderRadius: '16px', border: '1px solid rgba(212, 175, 55, 0.5)', boxShadow: '0 10px 30px rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', zIndex: 100, overflow: 'hidden' }}>
         <div style={{ padding: '8px 12px', background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, transparent 100%)', borderBottom: '1px solid rgba(212, 175, 55, 0.3)', fontWeight: 'bold', color: '#d4af37', fontSize: '0.9rem' }}>
-          TABLE CHAT
+          GAME LOG
         </div>
         
         <div ref={chatScrollRef} style={{ flex: 1, padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -569,16 +631,6 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
           ))}
         </div>
 
-        <form onSubmit={handleChatSubmit} style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.1)', padding: '8px' }}>
-          <input 
-            type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)}
-            placeholder="Message..."
-            style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '6px', outline: 'none', padding: '6px 10px', fontSize: '0.9rem' }}
-          />
-          <button type="submit" style={{ background: 'linear-gradient(135deg, #f2a900 0%, #d48e00 100%)', color: '#000', border: 'none', borderRadius: '6px', padding: '6px 12px', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer', marginLeft: '6px' }}>
-            SEND
-          </button>
-        </form>
       </div>
     </div>
   )

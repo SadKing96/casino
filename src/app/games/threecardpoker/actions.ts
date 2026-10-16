@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { cookies } from 'next/headers'
 import { Card, PlayerState, createDeck, evaluate3CardHand, dealerQualifies, compareHands, calculatePairPlusPayout, calculateAnteBonus } from './utils'
 
@@ -42,6 +43,7 @@ export async function placeAnte(tableId: string, anteAmount: number, pairPlusAmo
     where: { id: userId },
     data: { credits: { decrement: totalBet } }
   })
+  await recordWallet(userId, -totalBet, 'BET', 'Three Card Poker')
 
   const playerHands: Record<string, PlayerState> = JSON.parse(table.playerHands)
   playerHands[userId] = {
@@ -118,6 +120,7 @@ export async function placePlayBet(tableId: string) {
     where: { id: userId },
     data: { credits: { decrement: pState.betAnte } }
   })
+  await recordWallet(userId, -pState.betAnte, 'BET', 'Three Card Poker')
 
   pState.betPlay = pState.betAnte
   pState.status = 'PLAY'
@@ -230,6 +233,7 @@ export async function resolveRound(tableId: string) {
         where: { id: uid },
         data: { credits: { increment: payout } }
       })
+      await recordWallet(uid, payout, 'WIN', 'Three Card Poker')
       const u = await prisma.user.findUnique({ where: { id: uid } })
       chatHistory.push(`[${new Date().toLocaleTimeString()}] ${u?.username} won $${payout}!`)
     }

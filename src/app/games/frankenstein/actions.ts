@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 
 const SYMBOLS = ['A', 'K', 'Q', 'J', '10', '9', '🧟‍♂️', '🧠', '🦇', '🧪']
 
@@ -57,7 +58,10 @@ export async function getGlobalState() {
   
   return { jackpots, activePlayers: activePlayersList.map(p => p.username) }
 }
+const IS_DEV = process.env.NODE_ENV !== 'production'
+
 export async function resetFrankensteinGame() {
+  if (!IS_DEV) return { success: false, error: 'Not available' }
   const cookieStore = await cookies()
   const userId = cookieStore.get('userId')?.value
   if (!userId) return { success: false, error: 'Unauthorized' }
@@ -117,6 +121,8 @@ function spreadWilds(grid: string[][], r: number, c: number, wildChar: string): 
 }
 
 export async function spinFrankenstein(betAmount: number, forceOptions?: { forceJackpot?: string, forceFreeSpins?: boolean }) {
+  // Admin test overrides are dev-only; ignore them entirely in production
+  if (!IS_DEV) forceOptions = undefined
   const cookieStore = await cookies()
   const userId = cookieStore.get('userId')?.value
   if (!userId) throw new Error("Unauthorized")
@@ -129,8 +135,8 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
 
   const globalConfig = await prisma.globalConfig.findUnique({ where: { id: 'default' } })
   const gameOdds = globalConfig?.gameOdds ? JSON.parse(globalConfig.gameOdds) : {}
-  const winMult = gameOdds['slots']?.winRate ?? 1.0
-  const freeSpinsMult = gameOdds['slots']?.freeSpinsRate ?? 1.0
+  const winMult = (gameOdds['frankenstein'] ?? gameOdds['slots'])?.winRate ?? 1.0
+  const freeSpinsMult = (gameOdds['frankenstein'] ?? gameOdds['slots'])?.freeSpinsRate ?? 1.0
 
   if (!state.isFreeSpinMode && user.credits < betAmount) {
     throw new Error("Insufficient chip balance")
@@ -378,6 +384,7 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
       lastSeenAt: new Date()
     }
   })
+  await recordWallet(userId, Math.floor(totalWin) - (state.isFreeSpinMode ? 0 : betAmount), 'ROUND', 'Frankenstein')
 
   const updatedState = await prisma.frankensteinState.update({
     where: { userId },

@@ -20,10 +20,17 @@ export async function getGlobalConfig() {
         id: 'default',
         maintenanceMode: false,
         testMode: false,
-        enabledGames: JSON.stringify(['crash', 'keno', 'baccarat', 'craps', 'holdem', 'blackjack', 'roulette', 'threecardpoker', 'slots']),
+        enabledGames: JSON.stringify(['crash', 'keno', 'baccarat', 'craps', 'holdem', 'blackjack', 'roulette', 'threecardpoker', 'frankenstein', 'piggies', 'buffalo']),
         gameOdds: JSON.stringify({})
       }
     })
+  }
+
+  // Migration: the old single 'slots' toggle is now one toggle per slot game
+  const enabled: string[] = JSON.parse(config.enabledGames || '[]')
+  if (enabled.includes('slots')) {
+    const migrated = [...new Set([...enabled.filter(g => g !== 'slots'), 'frankenstein', 'piggies', 'buffalo'])]
+    config = await prisma.globalConfig.update({ where: { id: 'default' }, data: { enabledGames: JSON.stringify(migrated) } })
   }
   return config
 }

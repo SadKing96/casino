@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { UserProvider } from "@/context/UserContext";
 import { Navbar } from "@/components/Navbar";
-import { DealerEasterEgg } from "@/components/DealerEasterEgg";
 import { ForcePasswordReset } from "@/components/ForcePasswordReset";
 import AnimatedBackground from "@/app/components/AnimatedBackground";
 import { getUser } from "@/app/actions";
@@ -40,7 +39,6 @@ export default async function RootLayout({
           <main className="container">
             {children}
           </main>
-          <DealerEasterEgg />
         </UserProvider>
       </body>
     </html>

@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { Card, calculateScore, generateShoe, drawCards, evaluate21Plus3, evaluatePerfectPairs, evaluateLuckyLadies, evaluateBustIt } from './utils'
 
 export type Hand = {
@@ -129,6 +130,7 @@ export async function placeBet(tableId: string, mainBet: number, sideBets: { twe
     where: { id: userId },
     data: { credits: { decrement: totalBet } }
   })
+  await recordWallet(userId, -totalBet, 'BET', 'Blackjack')
 
   pState.status = 'READY'
   pState.sideBets = sideBets
@@ -264,6 +266,7 @@ export async function buyInsurance(tableId: string) {
   if (!user || user.credits < insuranceCost) throw new Error("Insufficient funds")
 
   await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: insuranceCost } } })
+  await recordWallet(userId, -insuranceCost, 'BET', 'Blackjack')
   
   pState.insuranceBet = insuranceCost
 
@@ -290,6 +293,7 @@ export async function resolveInsurance(tableId: string) {
       if (p.insuranceBet > 0) {
         const payout = p.insuranceBet * 3 // 2:1 payout + original bet
         await prisma.user.update({ where: { id: uid }, data: { credits: { increment: payout } } })
+        await recordWallet(uid, payout, 'WIN', 'Blackjack')
         chatHistory.push(`[${new Date().toLocaleTimeString()}] ${p.username} wins insurance.`)
       }
       p.status = 'RESOLVED'
@@ -392,6 +396,7 @@ export async function doubleDown(tableId: string, handId: string) {
   if (user.credits < hand.bet) throw new Error("Insufficient funds for double")
 
   await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: hand.bet } } })
+  await recordWallet(userId, -hand.bet, 'BET', 'Blackjack')
   hand.bet *= 2
   hand.doubleDown = true
 
@@ -439,6 +444,7 @@ export async function split(tableId: string, handId: string) {
   if (user.credits < hand.bet) throw new Error("Insufficient funds for split")
 
   await prisma.user.update({ where: { id: userId }, data: { credits: { decrement: hand.bet } } })
+  await recordWallet(userId, -hand.bet, 'BET', 'Blackjack')
 
   const isAces = hand.cards[0].rank === 'A'
   const c1 = hand.cards[0]
@@ -497,6 +503,7 @@ export async function surrender(tableId: string, handId: string) {
   
   const returnAmt = Math.floor(hand.bet / 2)
   await prisma.user.update({ where: { id: userId }, data: { credits: { increment: returnAmt } } })
+  await recordWallet(userId, returnAmt, 'REFUND', 'Blackjack')
 
   await prisma.blackjackTable.update({
     where: { id: tableId },
@@ -602,6 +609,7 @@ async function resolveRound(tableId: string) {
 
     if (totalPayout > 0) {
       await prisma.user.update({ where: { id: uid }, data: { credits: { increment: totalPayout } } })
+      await recordWallet(uid, totalPayout, 'WIN', 'Blackjack')
       chatHistory.push(`[System] ${p.username} won $${totalPayout}!`)
     }
     p.status = 'RESOLVED'
@@ -642,19 +650,3 @@ export async function nextRound(tableId: string) {
   })
 }
 
-export async function chatWithDealer(tableId: string, message: string) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('userId')?.value
-  const user = await prisma.user.findUnique({ where: { id: userId! } })
-  
-  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
-  if (!table || !user) return
-
-  const chatHistory = JSON.parse(table.chatHistory || '[]')
-  chatHistory.push(`[${new Date().toLocaleTimeString()}] ${user.username}: ${message}`)
-
-  await prisma.blackjackTable.update({
-    where: { id: tableId },
-    data: { chatHistory: JSON.stringify(chatHistory.slice(-50)) }
-  })
-}

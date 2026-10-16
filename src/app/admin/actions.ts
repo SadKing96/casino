@@ -2,6 +2,7 @@
 
 import { requireAdmin, getGlobalConfig } from '@/lib/admin'
 import { prisma } from '@/lib/prisma'
+import { recordWallet } from '@/lib/wallet'
 import { revalidatePath } from 'next/cache'
 import bcrypt from 'bcryptjs'
 
@@ -15,10 +16,16 @@ export async function getAllUsers() {
 
 export async function updateUserBalance(userId: string, credits: number) {
   await requireAdmin()
+  const before = await prisma.user.findUnique({ where: { id: userId }, select: { credits: true } })
   await prisma.user.update({
     where: { id: userId },
     data: { credits }
   })
+  const diff = credits - (before?.credits ?? 0)
+  if (diff !== 0) {
+    const { recordWallet } = await import('@/lib/wallet')
+    await recordWallet(userId, diff, 'ADMIN_ADJUST', 'Admin')
+  }
   revalidatePath('/admin')
 }
 
@@ -224,6 +231,7 @@ export async function resolveSportsBet(betId: string, won: boolean) {
       where: { id: bet.userId },
       data: { credits: { increment: payout } }
     })
+    await recordWallet(bet.userId, payout, 'WIN', 'Sportsbook')
     await prisma.sportsBet.update({
       where: { id: betId },
       data: { status: 'WON' }
