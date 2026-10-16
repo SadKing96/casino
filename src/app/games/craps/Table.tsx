@@ -1,9 +1,10 @@
+import { connectSocket } from '@/lib/socket'
 import { useUser } from '@/context/UserContext'
 import { getTableState, placeBet, rollDice } from './actions'
 import { CrapsBet, CrapsBetType } from './utils'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { io } from 'socket.io-client'
+
 
 export default function CrapsTable({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
   const { user, updateCredits } = useUser()
@@ -23,7 +24,7 @@ export default function CrapsTable({ tableId, onLeave }: { tableId: string, onLe
   useEffect(() => {
     if (!user) return
     fetchState()
-    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001')
+    const socket = connectSocket()
     socket.on('connect', () => socket.emit('join_table', tableId))
     socket.on('update_required', () => fetchState())
     return () => {
@@ -33,7 +34,7 @@ export default function CrapsTable({ tableId, onLeave }: { tableId: string, onLe
   }, [user, tableId])
 
   const notifyOthers = async () => {
-    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001')
+    const socket = connectSocket()
     socket.emit('action_taken', tableId)
     socket.disconnect()
   }

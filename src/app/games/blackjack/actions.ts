@@ -26,7 +26,10 @@ export type PlayerState = {
     luckyLadies: number
     bustIt: number
   }
+  readyForNext?: boolean
 }
+
+const NEXT_ROUND_MS = 10000
 
 export async function createTable(tableName: string) {
   return await prisma.blackjackTable.create({
@@ -296,9 +299,13 @@ export async function resolveInsurance(tableId: string) {
         await recordWallet(uid, payout, 'WIN', 'Blackjack')
         chatHistory.push(`[${new Date().toLocaleTimeString()}] ${p.username} wins insurance.`)
       }
-      p.status = 'RESOLVED'
+      if (p.status !== 'SKIPPED') {
+        p.status = 'RESOLVED'
+        p.readyForNext = false
+      }
       for (const h of p.hands) h.status = 'RESOLVED'
     }
+    dHand[1].hidden = false
   } else {
     chatHistory.push(`[${new Date().toLocaleTimeString()}] Dealer does not have Blackjack.`)
   }
@@ -307,7 +314,8 @@ export async function resolveInsurance(tableId: string) {
     where: { id: tableId },
     data: {
       status: dHasBJ ? 'RESOLVED' : 'PLAYING',
-      timerEndsAt: null,
+      timerEndsAt: dHasBJ ? new Date(Date.now() + NEXT_ROUND_MS) : null,
+      ...(dHasBJ ? { dealerHand: JSON.stringify(dHand) } : {}),
       playerStates: JSON.stringify(playerStates),
       chatHistory: JSON.stringify(chatHistory.slice(-50))
     }
@@ -613,12 +621,14 @@ async function resolveRound(tableId: string) {
       chatHistory.push(`[System] ${p.username} won $${totalPayout}!`)
     }
     p.status = 'RESOLVED'
+    p.readyForNext = false
   }
 
   await prisma.blackjackTable.update({
     where: { id: tableId },
     data: {
       status: 'RESOLVED',
+      timerEndsAt: new Date(Date.now() + NEXT_ROUND_MS),
       dealerHand: JSON.stringify(dHand),
       shoe: JSON.stringify(shoeData),
       playerStates: JSON.stringify(playerStates),
@@ -627,20 +637,18 @@ async function resolveRound(tableId: string) {
   })
 }
 
-export async function nextRound(tableId: string) {
-  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
-  if (!table || table.status !== 'RESOLVED') return
-
-  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+async function advanceRound(tableId: string, playerStates: Record<string, PlayerState>) {
   for (const p of Object.values(playerStates)) {
     p.status = 'SITTING'
     p.hands = []
     p.insuranceBet = 0
     p.sideBets = { twentyOnePlusThree: 0, perfectPairs: 0, luckyLadies: 0, bustIt: 0 }
+    delete p.readyForNext
   }
 
-  await prisma.blackjackTable.update({
-    where: { id: tableId },
+  // Conditional update so concurrent callers can't double-advance
+  await prisma.blackjackTable.updateMany({
+    where: { id: tableId, status: 'RESOLVED' },
     data: {
       status: 'BETTING',
       dealerHand: '[]',
@@ -648,5 +656,39 @@ export async function nextRound(tableId: string) {
       timerEndsAt: null
     }
   })
+}
+
+export async function nextRound(tableId: string) {
+  const cookieStore = await cookies()
+  const userId = cookieStore.get('userId')?.value
+
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'RESOLVED') return
+
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  if (userId && playerStates[userId]) playerStates[userId].readyForNext = true
+
+  // Only players who took part in this round (flag defined) gate the advance; SKIPPED / late joiners don't block
+  const allReady = Object.values(playerStates)
+    .filter(p => p.readyForNext !== undefined)
+    .every(p => p.readyForNext === true)
+  const timerExpired = !table.timerEndsAt || new Date() >= table.timerEndsAt
+
+  if (allReady || timerExpired) {
+    await advanceRound(tableId, playerStates)
+  } else {
+    await prisma.blackjackTable.updateMany({
+      where: { id: tableId, status: 'RESOLVED' },
+      data: { playerStates: JSON.stringify(playerStates) }
+    })
+  }
+}
+
+export async function checkAutoNextRound(tableId: string) {
+  const table = await prisma.blackjackTable.findUnique({ where: { id: tableId } })
+  if (!table || table.status !== 'RESOLVED') return
+  if (table.timerEndsAt && new Date() < table.timerEndsAt) return
+  const playerStates: Record<string, PlayerState> = JSON.parse(table.playerStates || '{}')
+  await advanceRound(tableId, playerStates)
 }
 

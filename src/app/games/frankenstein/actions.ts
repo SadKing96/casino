@@ -169,12 +169,16 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
 
   // Add Special Symbols
   if (!isFreeSpinMode) {
-    let forcedScatters = forceOptions?.forceFreeSpins ? 3 : 0
-    for (let c = 0; c < 5; c++) {
+    // FREE GAMES scatters (🔥): reel 1 is the "key", reels 2-5 complete the combo
+    if (forceOptions?.forceFreeSpins || Math.random() < (0.12 * freeSpinsMult)) {
+      grid[Math.floor(Math.random() * 3)][0] = '🔥'
+    }
+    let forcedScatters = forceOptions?.forceFreeSpins ? 2 : 0
+    for (let c = 1; c < 5; c++) {
       if (forcedScatters > 0) {
         grid[Math.floor(Math.random() * 3)][c] = '🔥'
         forcedScatters--
-      } else if (Math.random() < (0.1 * freeSpinsMult)) {
+      } else if (Math.random() < (0.2 * freeSpinsMult)) {
         grid[Math.floor(Math.random() * 3)][c] = '🔥'
       }
     }
@@ -209,9 +213,12 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
   const reel1BonusChance = isFreeSpinMode ? 0.35 : (0.1 * winMult)
   const isForcedJackpot = forceOptions?.forceJackpot && JACKPOT_NAMES.includes(forceOptions.forceJackpot);
 
-  if (Math.random() < reel1BonusChance || forceOptions?.forceJackpot === 'POWER' || forceOptions?.forceJackpot === 'ALIVE' || isForcedJackpot) {
+  const forceAlive = forceOptions?.forceJackpot === 'ALIVE'
+  // Reel 1 only holds one feature icon: skip if FREE GAMES already landed there
+  const reel1HasFreeGames = grid.some(row => row[0] === '🔥')
+  if (!reel1HasFreeGames && (Math.random() < reel1BonusChance || forceOptions?.forceJackpot === 'POWER' || forceAlive || isForcedJackpot)) {
     const r = Math.floor(Math.random() * 3)
-    if (Math.random() < 0.3 || forceOptions?.forceJackpot === 'POWER' || isForcedJackpot) {
+    if (!isForcedJackpot && !forceAlive && (Math.random() < 0.3 || forceOptions?.forceJackpot === 'POWER')) {
       grid[r][0] = 'POWER'
       powerUpTriggered = true
     } else {
@@ -224,6 +231,7 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
   for (let c = 1; c < 5; c++) {
     if (Math.random() < 0.15 || isForcedJackpot) {
       const r = Math.floor(Math.random() * 3)
+      if (grid[r][c] === '🔥') continue // don't overwrite FREE GAMES scatters
       if (Math.random() < 0.2 || isForcedJackpot) grid[r][c] = 'ORANGE'
       else grid[r][c] = 'BLUE'
     }
@@ -248,19 +256,24 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
   }
 
   let triggerFreeSpins = false
-  if (!isFreeSpinMode && scatterCount >= 3) {
+  // Free spins require FREE GAMES on reel 1 + 2 or more FREE GAMES on reels 2-5
+  let otherReelScatters = 0
+  for (let c = 1; c < 5; c++) if (grid.some(row => row[c] === '🔥')) otherReelScatters++
+  const freeGamesTriggered = grid.some(row => row[0] === '🔥') && otherReelScatters >= 2
+  if (!isFreeSpinMode && freeGamesTriggered) {
     triggerFreeSpins = true
     isFreeSpinMode = true
     freeSpinsRemaining = 10
     currentMultiplier = 1
   } else if (isFreeSpinMode) {
-    // Need a full 3 scatters to re-trigger, which is very rare now
-    if (scatterCount >= 3) freeSpinsRemaining += 10
+    // Re-trigger needs the same combo (scatters are very rare during free spins)
+    if (freeGamesTriggered) freeSpinsRemaining += 10
   }
 
   // Payline Evaluation
   let lineWinTotal = 0
   const winningLines: number[] = []
+  const winningCells: {r: number, c: number}[] = []
 
   for (let i = 0; i < PAYLINES.length; i++) {
     const line = PAYLINES[i]
@@ -295,6 +308,10 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
       if (lineWin > 0) {
         lineWinTotal += lineWin
         winningLines.push(i)
+        // Only the matched cells (left to right) are part of the win
+        for (let c = 0; c < matchCount; c++) {
+          if (!winningCells.some(w => w.r === line[c] && w.c === c)) winningCells.push({ r: line[c], c })
+        }
       }
     }
   }
@@ -320,7 +337,8 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
   let jackpotWinAmount = 0
   let jackpotsToReset: string[] = []
   
-  if (aliveTriggered || powerUpTriggered) {
+  // Heads (BLUE/ORANGE) only collect when an IT'S ALIVE icon lands on reel 1
+  if (aliveTriggered) {
     for (let c = 1; c < 5; c++) {
       for (let r = 0; r < 3; r++) {
         if (grid[r][c] === 'BLUE') {
@@ -412,6 +430,7 @@ export async function spinFrankenstein(betAmount: number, forceOptions?: { force
     jackpotWon: null,
     jackpotAmount: jackpotWinAmount,
     winningLines,
+    winningCells,
     lightningSpreads,
     fireSpreads,
     collectedPrizes,

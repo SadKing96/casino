@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { notifyUser } from './notify'
 
 export type WalletTxType = 'ROUND' | 'BET' | 'WIN' | 'REFUND' | 'ADMIN_ADJUST'
 
@@ -30,6 +31,12 @@ export async function recordWallet(
         balanceAfter: user.credits,
       },
     })
+    // Push the new balance to the user's open tabs (admin edits, payouts, etc.).
+    // Skipped for instant 'ROUND' games: the acting tab updates itself after its
+    // reel animation, and an early push would spoil the result.
+    if (type !== 'ROUND') {
+      await notifyUser(userId, 'credits_updated', { credits: user.credits })
+    }
   } catch (e) {
     console.error('Failed to record wallet transaction:', e)
   }

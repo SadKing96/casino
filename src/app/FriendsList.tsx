@@ -1,7 +1,8 @@
 'use client'
 
+import { connectSocket } from '@/lib/socket'
 import { useState, useEffect } from 'react'
-import { io, Socket } from 'socket.io-client'
+import type { Socket } from 'socket.io-client'
 import { useUser } from '@/context/UserContext'
 import { getFriends, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend } from './friendActions'
 
@@ -20,7 +21,7 @@ export default function FriendsList() {
     loadFriends()
     
     // Connect to Socket
-    const socket: Socket = io('http://localhost:3001')
+    const socket: Socket = connectSocket()
     
     socket.on('connect', () => {
       socket.emit('authenticate', { userId: user.id, username: user.username })

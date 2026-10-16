@@ -15,6 +15,31 @@ const INITIAL_GRID = [
 const JACKPOT_NAMES = ['MINI', 'MINOR', 'MAXI', 'SUPER', 'MAJOR', 'GRAND']
 const JACKPOT_MULT: Record<string, number> = { MINI: 10, MINOR: 25, MAXI: 50, SUPER: 150, MAJOR: 300, GRAND: 2000 }
 
+// Background music sits under the game sounds; 0.5 = half the volume slider
+const BG_MUSIC_LEVEL = 0.5
+// Free spins hype track is boosted above the theme; 1.0 = full volume slider
+const HYPE_MUSIC_LEVEL = 1.0
+// Extra amplification for the hype track beyond the browser's 100% cap (2 = twice as loud)
+const HYPE_BOOST = 4.0
+
+// Smoothly ramp an audio element's volume to a target over `ms` milliseconds.
+// A newer fade on the same element cancels any fade already in progress.
+const fadeTokens = new WeakMap<HTMLAudioElement, number>()
+function fadeVolume(el: HTMLAudioElement, target: number, ms: number, onDone?: () => void) {
+  const token = (fadeTokens.get(el) || 0) + 1
+  fadeTokens.set(el, token)
+  const start = el.volume
+  const t0 = performance.now()
+  const step = (now: number) => {
+    if (fadeTokens.get(el) !== token) return
+    const p = Math.min(1, (now - t0) / ms)
+    el.volume = Math.max(0, Math.min(1, start + (target - start) * p))
+    if (p < 1) requestAnimationFrame(step)
+    else onDone?.()
+  }
+  requestAnimationFrame(step)
+}
+
 export default function FrankensteinSlot() {
   const { user, updateCredits } = useUser()
   const [grid, setGrid] = useState<string[][]>(INITIAL_GRID)
@@ -29,6 +54,8 @@ export default function FrankensteinSlot() {
   const [persistentMultipliers, setPersistentMultipliers] = useState<number[]>(Array(15).fill(1))
   const [lastWin, setLastWin] = useState<number | null>(null)
   const [winningLines, setWinningLines] = useState<number[]>([])
+  const [winningCells, setWinningCells] = useState<{r: number, c: number}[]>([])
+  const [freeGamesBurning, setFreeGamesBurning] = useState(false)
   const [jackpotWon, setJackpotWon] = useState<string | null>(null)
   const [collectedPrizes, setCollectedPrizes] = useState<any[]>([])
   
@@ -61,14 +88,24 @@ export default function FrankensteinSlot() {
   const isMutedRef = useRef(false)
   const volumeRef = useRef(0.3)
   const bgMusicRef = useRef<HTMLAudioElement | null>(null)
+  const hypeMusicRef = useRef<HTMLAudioElement | null>(null)
+  const musicCtxRef = useRef<AudioContext | null>(null)
+  const freeSpinMusicRef = useRef(false) // true while the hype track is the active music
+  const MUSIC_CROSSFADE_MS = 2000
+
+  // Whichever music track should currently be audible
+  const activeMusic = () => freeSpinMusicRef.current ? hypeMusicRef.current : bgMusicRef.current
+  // Normal (un-ducked) volume for whichever track is active
+  const musicTarget = () => volumeRef.current * (freeSpinMusicRef.current ? HYPE_MUSIC_LEVEL : BG_MUSIC_LEVEL)
 
   useEffect(() => {
     isMutedRef.current = isMuted
     volumeRef.current = volume
-    if (bgMusicRef.current) {
-      bgMusicRef.current.muted = isMuted
-      bgMusicRef.current.volume = volume
+    for (const el of [bgMusicRef.current, hypeMusicRef.current]) {
+      if (el) el.muted = isMuted
     }
+    const active = activeMusic()
+    if (active) active.volume = musicTarget()
   }, [isMuted, volume])
 
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -128,16 +165,58 @@ export default function FrankensteinSlot() {
     if (typeof window !== 'undefined') {
       bgMusicRef.current = new Audio('/audio/frankenstein_theme.mp3')
       bgMusicRef.current.loop = true
-      bgMusicRef.current.volume = volumeRef.current
+      bgMusicRef.current.volume = volumeRef.current * BG_MUSIC_LEVEL
+      // Free spins hype track (loops; we crossfade in/out of it)
+      hypeMusicRef.current = new Audio('/audio/freespinshype.mp3')
+      hypeMusicRef.current.loop = true
+      hypeMusicRef.current.volume = 0
+      // Amplify the hype track via Web Audio (element volume still controls fades)
+      try {
+        const Ctx = window.AudioContext || (window as any).webkitAudioContext
+        if (Ctx) {
+          const ctx: AudioContext = new Ctx()
+          const src = ctx.createMediaElementSource(hypeMusicRef.current)
+          const gain = ctx.createGain()
+          gain.gain.value = HYPE_BOOST
+          src.connect(gain).connect(ctx.destination)
+          musicCtxRef.current = ctx
+        }
+      } catch (e) {}
     }
     
     return () => {
-      if (bgMusicRef.current) {
-        bgMusicRef.current.pause()
-        bgMusicRef.current = null
+      musicCtxRef.current?.close().catch(() => {})
+      musicCtxRef.current = null
+      for (const ref of [bgMusicRef, hypeMusicRef]) {
+        if (ref.current) {
+          ref.current.pause()
+          ref.current = null
+        }
       }
     }
   }, [])
+
+  // Crossfade between the theme and the hype track when free spins start/end
+  const inFreeSpins = !!gameState?.isFreeSpinMode
+  useEffect(() => {
+    if (freeSpinMusicRef.current === inFreeSpins) return
+    freeSpinMusicRef.current = inFreeSpins
+    const bg = bgMusicRef.current
+    const hype = hypeMusicRef.current
+    if (!bg || !hype) return
+    const target = musicTarget()
+    if (inFreeSpins) {
+      hype.currentTime = 0
+      hype.volume = 0
+      if (!isMutedRef.current) hype.play().catch(() => {})
+      fadeVolume(hype, target, MUSIC_CROSSFADE_MS)
+      fadeVolume(bg, 0, MUSIC_CROSSFADE_MS, () => bg.pause())
+    } else {
+      if (!isMutedRef.current && bg.paused) { bg.volume = 0; bg.play().catch(() => {}) }
+      fadeVolume(bg, target, MUSIC_CROSSFADE_MS)
+      fadeVolume(hype, 0, MUSIC_CROSSFADE_MS, () => hype.pause())
+    }
+  }, [inFreeSpins])
 
   useEffect(() => {
     if (!user) return
@@ -184,13 +263,18 @@ export default function FrankensteinSlot() {
     if (!gameState?.isFreeSpinMode && user.credits < betAmount) return
     
     // Play background music on first interaction if not playing
-    if (bgMusicRef.current && bgMusicRef.current.paused && !isMutedRef.current) {
-      bgMusicRef.current.play().catch(console.error)
+    if (musicCtxRef.current?.state === 'suspended') musicCtxRef.current.resume()
+    const music = activeMusic()
+    if (music && music.paused && !isMutedRef.current) {
+      music.volume = musicTarget()
+      music.play().catch(console.error)
     }
 
     setIsSpinning(true)
     setLastWin(null)
     setWinningLines([])
+    setWinningCells([])
+    setFreeGamesBurning(false)
     setJackpotWon(null)
     setLightningSpreads([])
     setFireSpreads([])
@@ -203,15 +287,67 @@ export default function FrankensteinSlot() {
         // Set the grid early so when reels stop they mount the correct symbol instead of old one
         setGrid(result.grid);
 
+        // IT'S ALIVE on reel 1 → reels 2-5 stop at 0.7s, 1.4s, 2.8s, 4.9s, timed to the build-up audio
+        const isAliveSuspense = result.grid.some((row: string[]) => row[0] === 'ALIVE')
+        const ALIVE_STOPS = [0, 700, 1400, 2800, 4900]
+        const stopTime = (c: number) => isAliveSuspense ? ALIVE_STOPS[c] : c * 200
+        const revealDelay = isAliveSuspense ? 100 : 300
+        if (isAliveSuspense && !isMutedRef.current) {
+          // Build-up audio is the star: crossfade it in loud while the background music ducks
+          const aliveAudio = new Audio('/audio/its_alive_feature.mp3')
+          const aliveTarget = Math.min(1, Math.max(0.6, volumeRef.current * 3))
+          aliveAudio.volume = 0
+          const bg = activeMusic()
+          if (bg) fadeVolume(bg, musicTarget() * 0.15, 400)
+          let restored = false
+          const restoreBg = () => {
+            if (restored) return
+            restored = true
+            const music = activeMusic()
+            if (music) fadeVolume(music, musicTarget(), 800)
+          }
+          // Start bringing the music back in as the clip winds down
+          aliveAudio.addEventListener('timeupdate', () => {
+            if (aliveAudio.duration && aliveAudio.duration - aliveAudio.currentTime < 0.6) {
+              if (!restored) fadeVolume(aliveAudio, 0, 500)
+              restoreBg()
+            }
+          })
+          aliveAudio.addEventListener('ended', restoreBg)
+          aliveAudio.addEventListener('error', restoreBg)
+          aliveAudio.play()
+            .then(() => fadeVolume(aliveAudio, aliveTarget, 250))
+            .catch(restoreBg) // restore music if file missing/blocked
+        }
+
         // Stop reels sequentially
         [0, 1, 2, 3, 4].forEach(cIndex => {
           setTimeout(() => {
+            // BOOM for every IT'S ALIVE / FREE GAMES tile as its reel lands,
+            // plus jackpot (ORANGE) heads when IT'S ALIVE makes them pay
+            const aliveOnReel1 = result.grid.some((row: string[]) => row[0] === 'ALIVE')
+            const featureTiles = result.grid.filter((row: string[]) =>
+              row[cIndex] === 'ALIVE' || row[cIndex] === '🔥' || (aliveOnReel1 && row[cIndex] === 'ORANGE')
+            ).length
+            if (featureTiles > 0 && !isMutedRef.current) {
+              for (let i = 0; i < featureTiles; i++) {
+                const boom = new Audio('/audio/boom.mp3')
+                boom.volume = Math.min(1, Math.max(0.5, volumeRef.current * 2.5))
+                setTimeout(() => boom.play().catch(() => {}), i * 80)
+                // Fade the tail out so it doesn't cut off abruptly
+                boom.addEventListener('playing', () => {
+                  const fadeMs = 350
+                  const startFadeIn = Math.max(0, boom.duration * 1000 - fadeMs - 30)
+                  setTimeout(() => fadeVolume(boom, 0, fadeMs), startFadeIn)
+                }, { once: true })
+              }
+            }
             setSpinningReels(prev => {
               const next = [...prev]
               next[cIndex] = false
               return next
             })
-          }, cIndex * 200) // 200ms delay between each reel stopping
+          }, stopTime(cIndex))
         })
 
         setTimeout(() => {
@@ -219,6 +355,8 @@ export default function FrankensteinSlot() {
           updateCredits(result.newBalance)
           setLastWin(result.totalWin)
           setWinningLines(result.winningLines)
+          setWinningCells(result.winningCells || [])
+          setFreeGamesBurning(!!result.triggerFreeSpins)
           setJackpotWon(result.jackpotWon)
           setCollectedPrizes(result.collectedPrizes || [])
           
@@ -242,7 +380,7 @@ export default function FrankensteinSlot() {
           setGameState(result.newState)
           setLightningSpreads(result.lightningSpreads || [])
           setFireSpreads(result.fireSpreads || [])
-        }, 1000) // Wait 1 second after last reel stops before showing wins/features
+        }, stopTime(4) + revealDelay) // Delay after last reel stops before showing wins/features
       }, 1000) // Base spin duration before stopping sequence begins
     } catch (e) {
       setIsSpinning(false)
@@ -403,13 +541,18 @@ export default function FrankensteinSlot() {
             {grid.map((row, rIndex) => (
               <div key={rIndex} style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
                 {row.map((symbol, cIndex) => {
-                  const isWinning = winningLines.includes(rIndex)
+                  const isWinning = winningCells.some(w => w.r === rIndex && w.c === cIndex)
                   const isLightning = lightningSpreads.some(s => s.r === rIndex && s.c === cIndex)
                   const isFire = fireSpreads.some(s => s.r === rIndex && s.c === cIndex)
                   const isReelSpinning = spinningReels[cIndex]
+                  // Ignite once reel 1 + at least one more stopped reel show FREE GAMES;
+                  // after the reveal, only keep burning if free spins actually triggered
+                  const fgStoppedCols = [0, 1, 2, 3, 4].filter(c => !spinningReels[c] && grid.some(row => row[c] === '🔥'))
+                  const fgAnticipation = fgStoppedCols.includes(0) && fgStoppedCols.length >= 2
+                  const isBurning = symbol === '🔥' && !isReelSpinning && (isSpinning ? fgAnticipation : freeGamesBurning)
                   
                   return (
-                      <div key={cIndex} style={{
+                      <div key={cIndex} className={isBurning ? 'free-games-burning' : undefined} style={{
                         width: '80px', height: '80px', background: '#0a0a1a',
                         borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '3.5rem', border: '1px solid #333',
@@ -426,7 +569,11 @@ export default function FrankensteinSlot() {
                           transition={isReelSpinning ? { repeat: Infinity, duration: 0.2, ease: 'linear' } : { type: 'spring', bounce: 0.6, duration: 0.6 }}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', transformOrigin: 'center' }}
                         >
-                          {symbol === 'BLUE' ? '⚡' : symbol === 'ORANGE' ? '🔥' : symbol === 'POWER' ? '🔋' : symbol === 'ALIVE' ? '🧟‍♂️' : symbol}
+                          {symbol === 'BLUE' ? '⚡' : symbol === 'ORANGE' ? '🔥' : symbol === 'POWER' ? '🔋' : symbol === 'ALIVE' ? (
+                            <img src="/images/its_alive.png" alt="It's Alive!" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', filter: 'drop-shadow(0 0 8px #00ffff)' }} />
+                          ) : symbol === '🔥' ? (
+                            <img src="/images/free_games.png" alt="Free Games" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', filter: 'drop-shadow(0 0 8px #ff5500)' }} />
+                          ) : symbol}
                         </motion.div>
                         {/* Winning Overlay */}
                         {isWinning && !isSpinning && (
@@ -439,6 +586,10 @@ export default function FrankensteinSlot() {
                         {/* Fire Overlay */}
                         {isFire && !isSpinning && (
                           <div style={{ position: 'absolute', inset: 0, border: '4px solid #ff5500', borderRadius: '8px', opacity: 0.8, pointerEvents: 'none' }} />
+                        )}
+                        {/* Free Games burning flames */}
+                        {isBurning && (
+                          <div className="free-games-flames" />
                         )}
                       </div>
                   )
@@ -476,6 +627,10 @@ export default function FrankensteinSlot() {
           
           <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '6px' }} onClick={() => handleSpin({ forceFreeSpins: true })}>
             Force Free Spins
+          </button>
+
+          <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '6px' }} onClick={() => handleSpin({ forceJackpot: 'ALIVE' })}>
+            Force It's Alive
           </button>
 
           <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '6px', background: 'rgba(255,0,0,0.3)', borderColor: 'red' }} onClick={async () => {
@@ -635,6 +790,42 @@ export default function FrankensteinSlot() {
 
       {/* Add specific CSS for pyramid blocks */}
       <style dangerouslySetInnerHTML={{__html: `
+        .free-games-burning {
+          z-index: 2;
+          border: 2px solid #ffaa00 !important;
+          animation: fgBurn 0.35s ease-in-out infinite alternate, fgShake 0.12s linear infinite;
+        }
+        .free-games-burning img {
+          animation: fgFlicker 0.18s steps(2) infinite;
+        }
+        @keyframes fgBurn {
+          0%   { box-shadow: 0 0 18px 4px #ff3c00, 0 -8px 28px 6px #ff7b00, inset 0 0 18px #ffaa00; }
+          100% { box-shadow: 0 0 34px 10px #ff5500, 0 -16px 44px 12px #ffcc00, inset 0 0 30px #ffdd55; }
+        }
+        @keyframes fgShake {
+          0% { transform: translate(0, 0); } 25% { transform: translate(-1px, 1px); }
+          50% { transform: translate(1px, -1px); } 75% { transform: translate(-1px, -1px); }
+          100% { transform: translate(0, 0); }
+        }
+        @keyframes fgFlicker {
+          0% { filter: brightness(1.15) saturate(1.3) drop-shadow(0 0 8px #ff5500); }
+          100% { filter: brightness(1.45) saturate(1.6) drop-shadow(0 0 14px #ffcc00); }
+        }
+        .free-games-flames {
+          position: absolute; inset: 0; pointer-events: none; border-radius: 8px;
+          mix-blend-mode: screen;
+          background:
+            radial-gradient(ellipse 30% 60% at 20% 110%, rgba(255,90,0,0.9), transparent 70%),
+            radial-gradient(ellipse 30% 70% at 50% 115%, rgba(255,200,0,0.9), transparent 70%),
+            radial-gradient(ellipse 30% 60% at 80% 110%, rgba(255,60,0,0.9), transparent 70%);
+          background-size: 100% 200%;
+          animation: fgRise 0.6s linear infinite;
+        }
+        @keyframes fgRise {
+          0%   { background-position: 0 0%;   opacity: 0.95; }
+          50%  { opacity: 0.7; }
+          100% { background-position: 0 -100%; opacity: 0.95; }
+        }
         @keyframes lightningFlash {
           0% { opacity: 0; }
           5% { opacity: 0.4; }

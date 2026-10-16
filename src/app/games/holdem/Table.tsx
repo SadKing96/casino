@@ -1,10 +1,11 @@
+import { connectSocket } from '@/lib/socket'
 import { useUser } from '@/context/UserContext'
 import { getTableState, dealHand, playerAction } from './actions'
 import { Card, PlayerState, evaluateBestHand } from './utils'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { io } from 'socket.io-client'
+
 
 export default function HoldemTable({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
   const { user, updateCredits } = useUser()
@@ -32,7 +33,7 @@ export default function HoldemTable({ tableId, onLeave }: { tableId: string, onL
     if (!user) return
     fetchState()
 
-    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001')
+    const socket = connectSocket()
     
     socket.on('connect', () => {
       socket.emit('join_table', tableId)
@@ -55,7 +56,7 @@ export default function HoldemTable({ tableId, onLeave }: { tableId: string, onL
   }, [chatHistory])
 
   const notifyOthers = async () => {
-    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001')
+    const socket = connectSocket()
     socket.emit('action_taken', tableId)
     socket.disconnect()
   }

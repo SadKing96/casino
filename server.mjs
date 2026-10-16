@@ -1,7 +1,35 @@
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 
-const httpServer = createServer()
+// Internal endpoint: POST /notify { userId?, room?, event, data }
+// Only accepted from the same machine/container (loopback) - the public site only
+// proxies /socket.io/*, so this is never reachable from the internet.
+const httpServer = createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/notify') {
+    const ip = req.socket.remoteAddress || ''
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) {
+      res.writeHead(403).end()
+      return
+    }
+    let body = ''
+    req.on('data', c => { body += c; if (body.length > 1e5) req.destroy() })
+    req.on('end', () => {
+      try {
+        const { userId, room, event, data } = JSON.parse(body || '{}')
+        if (event) {
+          const target = room || (userId ? `user_${userId}` : null)
+          if (target) io.to(target).emit(event, data)
+        }
+        res.writeHead(204).end()
+      } catch {
+        res.writeHead(400).end()
+      }
+    })
+    return
+  }
+  // Socket.io handles its own /socket.io/ paths; anything else is not found
+  if (!req.url?.startsWith('/socket.io')) res.writeHead(404).end()
+})
 const io = new Server(httpServer, {
   cors: {
     origin: '*', // For local dev, allow all

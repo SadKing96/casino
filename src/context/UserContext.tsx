@@ -1,7 +1,8 @@
 'use client'
 
-import React, { createContext, useContext, useState } from 'react'
-import { logout as logoutAction } from '@/app/actions'
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { logout as logoutAction, getUser } from '@/app/actions'
+import { connectSocket } from '@/lib/socket'
 
 type User = {
   id: string;
@@ -34,6 +35,36 @@ export function UserProvider({ children, initialUser }: { children: React.ReactN
   const updateCredits = (credits: number) => {
     setUser(prev => prev ? { ...prev, credits } : null)
   }
+
+  // Live balance: server pushes 'credits_updated' (admin edits, table payouts...).
+  // Fallback: re-sync when the tab regains focus and every 15s, in case the socket drops.
+  const userId = user?.id
+  useEffect(() => {
+    if (!userId) return
+    const socket = connectSocket()
+    const auth = () => socket.emit('authenticate', { userId, username: user?.username })
+    socket.on('connect', auth)
+    socket.on('credits_updated', (d: { credits: number }) => {
+      if (typeof d?.credits === 'number') updateCredits(d.credits)
+    })
+
+    const resync = () => {
+      if (document.visibilityState !== 'visible') return
+      // Slot pages update the balance themselves after the reels stop
+      if (/^\/games\/(frankenstein|piggies|buffalo)/.test(window.location.pathname)) return
+      getUser().then(u => { if (u) updateCredits(u.credits) }).catch(() => {})
+    }
+    const interval = setInterval(resync, 15000)
+    window.addEventListener('focus', resync)
+    document.addEventListener('visibilitychange', resync)
+
+    return () => {
+      socket.disconnect()
+      clearInterval(interval)
+      window.removeEventListener('focus', resync)
+      document.removeEventListener('visibilitychange', resync)
+    }
+  }, [userId])
 
   return (
     <UserContext.Provider value={{ user, setUser, logout, updateCredits, isLoading }}>

@@ -1,11 +1,60 @@
 'use client'
 
 import { useUser } from '@/context/UserContext'
-import { getTableState, joinTable, leaveTable, placeBet, checkAutoDeal, hit, stand, doubleDown, split, surrender, buyInsurance, resolveInsurance, nextRound, PlayerState, Hand } from './actions'
+import { getTableState, joinTable, leaveTable, placeBet, checkAutoDeal, hit, stand, doubleDown, split, surrender, buyInsurance, resolveInsurance, nextRound, checkAutoNextRound, PlayerState, Hand } from './actions'
 import { Card, calculateScore, calculateScoreString } from './utils'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { io, Socket } from 'socket.io-client'
+import type { Socket } from 'socket.io-client'
+import { connectSocket } from '@/lib/socket'
+
+const CHIP_DENOMS: { value: number, bg: string, edge: string, text: string }[] = [
+  { value: 500, bg: '#6a1b9a', edge: '#e1bee7', text: '#fff' },
+  { value: 100, bg: '#111', edge: '#d4af37', text: '#d4af37' },
+  { value: 50, bg: '#c62828', edge: '#fff', text: '#fff' },
+  { value: 10, bg: '#1e63c9', edge: '#fff', text: '#fff' },
+]
+
+function breakIntoChips(amount: number, maxChips = 5) {
+  const chips: typeof CHIP_DENOMS = []
+  let rem = amount
+  for (const d of CHIP_DENOMS) {
+    while (rem >= d.value) { chips.push(d); rem -= d.value }
+  }
+  if (chips.length === 0 && amount > 0) chips.push(CHIP_DENOMS[3])
+  // keep the largest denominations visible, cap the stack height
+  return chips.slice(0, maxChips).reverse()
+}
+
+function ChipStack({ amount, size = 34 }: { amount: number, size?: number }) {
+  const chips = breakIntoChips(amount)
+  const step = Math.round(size * 0.14)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ position: 'relative', width: size, height: size + step * (chips.length - 1) }}>
+        {chips.map((c, idx) => (
+          <motion.div
+            key={idx}
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: idx * 0.05 }}
+            style={{
+              position: 'absolute', left: 0, bottom: idx * step, width: size, height: size, borderRadius: '50%',
+              background: `repeating-conic-gradient(${c.bg} 0deg 30deg, ${c.edge} 30deg 45deg)`,
+              boxShadow: '0 2px 3px rgba(0,0,0,0.6)', zIndex: idx,
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <div style={{ width: size * 0.66, height: size * 0.66, borderRadius: '50%', background: c.bg, border: `1px dashed ${c.edge}`,
+              color: c.text, fontSize: size * 0.26, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {idx === chips.length - 1 ? c.value : ''}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string, onLeave: () => void }) {
   const { user } = useUser()
@@ -29,6 +78,15 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
   // Socket
   const socketRef = useRef<Socket | null>(null)
 
+  // Toast notice
+  const [notice, setNotice] = useState<string | null>(null)
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showNotice = (msg: string) => {
+    setNotice(msg)
+    if (noticeTimer.current) clearTimeout(noticeTimer.current)
+    noticeTimer.current = setTimeout(() => setNotice(null), 2500)
+  }
+
   const loadTable = async () => {
     const t = await getTableState(tableId)
     setTable(t)
@@ -40,7 +98,7 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
   useEffect(() => {
     loadTable()
 
-    const socket = io('http://localhost:3001')
+    const socket = connectSocket()
     socketRef.current = socket
     
     socket.on('connect', () => {
@@ -81,6 +139,11 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
           })
         } else if (table.status === 'INSURANCE') {
           resolveInsurance(tableId).then(() => {
+            socketRef.current?.emit('action_taken', `blackjack_${tableId}`)
+            loadTable()
+          })
+        } else if (table.status === 'RESOLVED') {
+          checkAutoNextRound(tableId).then(() => {
             socketRef.current?.emit('action_taken', `blackjack_${tableId}`)
             loadTable()
           })
@@ -133,6 +196,19 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
     onLeave()
   }
 
+  const handleSit = async (seatIndex: number) => {
+    setIsProcessing(true)
+    try {
+      await joinTable(tableId, seatIndex)
+      socketRef.current?.emit('action_taken', `blackjack_${tableId}`)
+    } catch (e: any) {
+      console.error(e)
+      showNotice('Seat just taken')
+    }
+    await loadTable()
+    setIsProcessing(false)
+  }
+
   const toggleSideBet = (type: keyof typeof sideBets) => {
     setSideBets(prev => ({
       ...prev,
@@ -178,6 +254,12 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
       ? (myNet > 0 ? 'WIN' : myNet === 0 ? 'PUSH' : 'LOSE')
       : null
   const anyBust = myHands.some(h => h.status === 'BUST')
+
+  // Ready-up for next round
+  const roundParticipants = Object.values(playerStates).filter(p => p.readyForNext !== undefined)
+  const readyCount = roundParticipants.filter(p => p.readyForNext).length
+  const iAmReady = !!myState?.readyForNext
+  const seatNet = (p: PlayerState) => p.hands.reduce((acc, h) => acc + (h.payout || 0) - h.bet, 0)
 
   return (
     <div style={{ 
@@ -263,11 +345,28 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
       {/* TIMER DISPLAY */}
       {timeLeft !== null && timeLeft > 0 && (
         <div style={{ position: 'absolute', top: '150px', left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
-          <div style={{ background: 'rgba(0,0,0,0.8)', color: '#ffcc00', padding: '10px 20px', borderRadius: '20px', border: '2px solid #ffcc00', fontWeight: 'bold', fontSize: '1.2rem', boxShadow: '0 0 15px rgba(255,204,0,0.5)' }}>
-            {isInsurance ? 'Insurance Decision...' : 'Dealing in'} {timeLeft}s
+          <div style={{ background: 'rgba(0,0,0,0.8)', color: isResolved ? '#00ffaa' : '#ffcc00', padding: '10px 20px', borderRadius: '20px', border: `2px solid ${isResolved ? '#00ffaa' : '#ffcc00'}`, fontWeight: 'bold', fontSize: '1.2rem', boxShadow: `0 0 15px ${isResolved ? 'rgba(0,255,170,0.5)' : 'rgba(255,204,0,0.5)'}`, whiteSpace: 'nowrap' }}>
+            {isResolved
+              ? `Next round in ${timeLeft}s · ${readyCount}/${roundParticipants.length} ready`
+              : isInsurance ? `Insurance Decision... ${timeLeft}s` : isBetting ? `Dealing in ${timeLeft}s` : `${timeLeft}s`}
           </div>
         </div>
       )}
+
+      {/* TOAST NOTICE */}
+      <AnimatePresence>
+        {notice && (
+          <motion.div
+            key="notice"
+            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            style={{ position: 'absolute', top: '80px', left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+              background: 'rgba(60,0,10,0.92)', color: '#ffb3c0', border: '1px solid #ff3355', borderRadius: '12px',
+              padding: '10px 22px', fontWeight: 'bold', boxShadow: '0 0 20px rgba(255,30,60,0.5)' }}
+          >
+            {notice}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* DEALER PORTRAIT */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '10px', position: 'relative', zIndex: 10, marginTop: '90px' }}>
@@ -362,7 +461,7 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
                 <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px', fontSize: '0.8rem' }}>SEAT OPEN</div>
                 <div style={{ width: '70px', height: '100px', border: '2px dashed rgba(255,255,255,0.3)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {!myState && (
-                    <button onClick={() => handleAction(() => joinTable(tableId, i))} className="btn-primary" style={{ fontSize: '0.8rem', padding: '4px 8px' }}>SIT</button>
+                    <button onClick={() => handleSit(i)} disabled={isProcessing} className="btn-primary" style={{ fontSize: '0.8rem', padding: '4px 8px' }}>SIT</button>
                   )}
                 </div>
                 <div style={{ width: '80px', height: '80px', border: '3px solid rgba(212, 175, 55, 0.3)', borderRadius: '50%', marginTop: '10px', pointerEvents: 'none' }} />
@@ -375,9 +474,40 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
 
           return (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: marginTops[i], position: 'relative', width: '200px' }}>
-              <div style={{ color: isMe ? '#00ffcc' : '#fff', fontWeight: 'bold', marginBottom: '4px', opacity: isSkipped ? 0.5 : 0.9, fontSize: '0.9rem', textDecoration: isSkipped ? 'line-through' : 'none' }}>
+              <div style={{ color: isMe ? '#00ffcc' : '#fff', fontWeight: 'bold', marginBottom: '4px', opacity: isSkipped ? 0.5 : 0.9, fontSize: '0.9rem', textDecoration: isSkipped ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {seat.username}
+                {isResolved && seat.readyForNext && (
+                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} title="Ready for next round"
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', borderRadius: '50%', background: '#00c853', color: '#fff', fontSize: '0.75rem', boxShadow: '0 0 8px #00ffaa', textDecoration: 'none' }}>
+                    ✓
+                  </motion.span>
+                )}
               </div>
+
+              {/* Seat result pop (visible to everyone) */}
+              <AnimatePresence>
+                {dealerDoneRevealing && !isSkipped && seat.hands.length > 0 && (() => {
+                  const net = seatNet(seat)
+                  const cfg = net > 0
+                    ? { text: `+$${net.toLocaleString()}`, color: '#00ffaa', glow: '0 0 12px #00ffaa' }
+                    : net < 0
+                      ? { text: `-$${Math.abs(net).toLocaleString()}`, color: '#ff3355', glow: '0 0 12px #ff1a40' }
+                      : { text: 'PUSH', color: '#bbb', glow: '0 0 8px rgba(255,255,255,0.4)' }
+                  return (
+                    <motion.div
+                      key={`pop-${seat.id}`}
+                      initial={{ opacity: 0, y: 10, scale: 0.5 }}
+                      animate={{ opacity: [0, 1, 1, 0], y: [10, -10, -30, -60], scale: [0.5, 1.25, 1, 1] }}
+                      transition={{ duration: 2.6, times: [0, 0.15, 0.6, 1], ease: 'easeOut' }}
+                      style={{ position: 'absolute', top: '-30px', left: '50%', translateX: '-50%', zIndex: 120, pointerEvents: 'none',
+                        color: cfg.color, fontWeight: 900, fontSize: '1.7rem', textShadow: cfg.glow, whiteSpace: 'nowrap',
+                        background: 'rgba(0,0,0,0.6)', borderRadius: '12px', padding: '2px 12px' }}
+                    >
+                      {cfg.text}
+                    </motion.div>
+                  )
+                })()}
+              </AnimatePresence>
               
               {/* Hands Display */}
               <div style={{ display: 'flex', gap: '15px', minHeight: '120px', justifyContent: 'center' }}>
@@ -470,11 +600,15 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
                   background: isReady ? 'rgba(0, 255, 170, 0.1)' : 'transparent',
                   position: 'relative'
                 }}>
-                  {seat.hands.length > 0 && (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{ color: '#ffcc00', fontWeight: 'bold', textShadow: '0 0 5px #000', textAlign: 'center' }}>
-                      Main<br/>${seat.hands.reduce((acc: number, h: Hand) => acc + h.bet, 0)}
-                    </motion.div>
-                  )}
+                  {seat.hands.length > 0 && (() => {
+                    const total = seat.hands.reduce((acc: number, h: Hand) => acc + h.bet, 0)
+                    return (
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <ChipStack amount={total} />
+                        <div style={{ color: '#ffcc00', fontWeight: 'bold', fontSize: '0.8rem', textShadow: '0 0 5px #000', marginTop: '2px' }}>${total.toLocaleString()}</div>
+                      </motion.div>
+                    )
+                  })()}
                   {isReady && <div style={{ color: '#00ffaa', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '4px' }}>READY</div>}
                   {seat.insuranceBet > 0 && (
                     <div style={{ position: 'absolute', top: '-25px', color: '#ffcc00', fontSize: '0.7rem', border: '1px solid #ffcc00', borderRadius: '10px', padding: '2px 6px', background: 'rgba(0,0,0,0.8)' }}>
@@ -487,9 +621,11 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
                 <div style={{ display: 'flex', gap: '5px', position: 'absolute', top: '90px', left: '50%', transform: 'translateX(-50%)' }}>
                   {seat.sideBets && Object.entries(seat.sideBets).map(([key, val]) => {
                     if ((val as number) <= 0) return null
+                    const labels: Record<string, string> = { twentyOnePlusThree: '21+3', perfectPairs: 'PP', luckyLadies: 'LL', bustIt: 'BUST' }
                     return (
-                      <div key={key} style={{ width: '25px', height: '25px', borderRadius: '50%', border: '1px solid #ff00ff', background: 'rgba(255,0,255,0.2)', color: '#fff', fontSize: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={key}>
-                        ${val}
+                      <div key={key} title={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <ChipStack amount={val as number} size={20} />
+                        <div style={{ color: '#ffccff', fontSize: '0.55rem', fontWeight: 'bold', textShadow: '0 0 4px #000', whiteSpace: 'nowrap' }}>{labels[key] ?? key} ${val as number}</div>
                       </div>
                     )
                   })}
@@ -612,8 +748,8 @@ export default function BlackjackTableUI({ tableId, onLeave }: { tableId: string
 
         {isResolved && myState && (
           <div style={{ display: 'flex', gap: '16px', background: 'rgba(0,0,0,0.6)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(212,175,55,0.3)', backdropFilter: 'blur(5px)' }}>
-            <button className="btn-primary" style={{ padding: '16px 32px', fontSize: '1.2rem', minWidth: '200px' }} onClick={() => handleAction(() => nextRound(tableId))} disabled={isProcessing}>
-              NEXT ROUND
+            <button className="btn-primary" style={{ padding: '16px 32px', fontSize: '1.2rem', minWidth: '200px', ...(iAmReady ? { background: '#00a86b', opacity: 0.85, cursor: 'default' } : {}) }} onClick={() => handleAction(() => nextRound(tableId))} disabled={isProcessing || iAmReady}>
+              {iAmReady ? 'READY ✓' : 'NEXT ROUND'}
             </button>
           </div>
         )}
